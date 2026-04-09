@@ -63,11 +63,15 @@ export function parseSSEFrames(buffer: string): {
   const frames: SSEFrame[] = []
   let pos = 0
 
-  // SSE frames are delimited by double newlines
-  let idx: number
-  while ((idx = buffer.indexOf('\n\n', pos)) !== -1) {
-    const rawFrame = buffer.slice(pos, idx)
-    pos = idx + 2
+  // SSE frames are delimited by an empty line. Support LF and CRLF streams.
+  const frameDelimiter = /\r?\n\r?\n/g
+  frameDelimiter.lastIndex = pos
+
+  let delimiterMatch: RegExpExecArray | null
+  while ((delimiterMatch = frameDelimiter.exec(buffer)) !== null) {
+    const frameEnd = delimiterMatch.index
+    const rawFrame = buffer.slice(pos, frameEnd)
+    pos = frameEnd + delimiterMatch[0].length
 
     // Skip empty frames
     if (!rawFrame.trim()) continue
@@ -83,7 +87,13 @@ export function parseSSEFrames(buffer: string): {
       let lineEnd = rawFrame.indexOf('\n', lineStart)
       if (lineEnd === -1) lineEnd = len
 
-      // Process line [lineStart, lineEnd)
+      // Strip trailing \r for CRLF streams
+      const effectiveEnd =
+        lineEnd > lineStart && rawFrame.charCodeAt(lineEnd - 1) === 13 /* '\r' */
+          ? lineEnd - 1
+          : lineEnd
+
+      // Process line [lineStart, effectiveEnd)
       if (rawFrame.charCodeAt(lineStart) === 58 /* ':' */) {
         // SSE comment (e.g., `:keepalive`)
         isComment = true
@@ -92,7 +102,7 @@ export function parseSSEFrames(buffer: string): {
       }
 
       const colonIdx = rawFrame.indexOf(':', lineStart)
-      if (colonIdx === -1 || colonIdx >= lineEnd) {
+      if (colonIdx === -1 || colonIdx >= effectiveEnd) {
         lineStart = lineEnd + 1
         continue
       }
@@ -103,7 +113,7 @@ export function parseSSEFrames(buffer: string): {
         rawFrame.charCodeAt(colonIdx + 1) === 32 /* ' ' */
           ? colonIdx + 2
           : colonIdx + 1
-      const value = rawFrame.slice(valueStart, lineEnd)
+      const value = rawFrame.slice(valueStart, effectiveEnd)
 
       switch (field) {
         case 'event':
@@ -197,6 +207,7 @@ export class SSETransport implements Transport {
 
   // Liveness detection
   private livenessTimer: NodeJS.Timeout | null = null
+  private lastActivityTime = 0
 
   // POST URL (derived from SSE URL)
   private postUrl: string
@@ -582,6 +593,7 @@ export class SSETransport implements Transport {
    */
   private resetLivenessTimer(): void {
     this.clearLivenessTimer()
+    this.lastActivityTime = Date.now()
     this.livenessTimer = setTimeout(this.onLivenessTimeout, LIVENESS_TIMEOUT_MS)
   }
 
