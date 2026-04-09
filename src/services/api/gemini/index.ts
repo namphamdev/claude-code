@@ -106,7 +106,11 @@ export async function* queryModelGemini(
 
     const adaptedStream = adaptGeminiStreamToAnthropic(stream, geminiModel)
     const contentBlocks: Record<number, any> = {}
-    let partialMessage: any = undefined
+    // Parallel arrays for chunk-based accumulation (joined at content_block_stop)
+    const textChunks: Record<number, string[]> = {}
+    const inputChunks: Record<number, string[]> = {}
+    const thinkingChunks: Record<number, string[]> = {}
+    let partialMessage: any
     let ttftMs = 0
     const start = Date.now()
 
@@ -121,10 +125,13 @@ export async function* queryModelGemini(
           const cb = (event as any).content_block
           if (cb.type === 'tool_use') {
             contentBlocks[idx] = { ...cb, input: '' }
+            inputChunks[idx] = []
           } else if (cb.type === 'text') {
             contentBlocks[idx] = { ...cb, text: '' }
+            textChunks[idx] = []
           } else if (cb.type === 'thinking') {
             contentBlocks[idx] = { ...cb, thinking: '', signature: '' }
+            thinkingChunks[idx] = []
           } else {
             contentBlocks[idx] = { ...cb }
           }
@@ -137,11 +144,11 @@ export async function* queryModelGemini(
           if (!block) break
 
           if (delta.type === 'text_delta') {
-            block.text = (block.text || '') + delta.text
+            textChunks[idx]?.push(delta.text)
           } else if (delta.type === 'input_json_delta') {
-            block.input = (block.input || '') + delta.partial_json
+            inputChunks[idx]?.push(delta.partial_json)
           } else if (delta.type === 'thinking_delta') {
-            block.thinking = (block.thinking || '') + delta.thinking
+            thinkingChunks[idx]?.push(delta.thinking)
           } else if (delta.type === 'signature_delta') {
             if (block.type === 'thinking') {
               block.signature = delta.signature
@@ -155,6 +162,20 @@ export async function* queryModelGemini(
           const idx = (event as any).index
           const block = contentBlocks[idx]
           if (!block || !partialMessage) break
+
+          // Join accumulated chunks into final strings
+          if (textChunks[idx]) {
+            block.text = textChunks[idx].join('')
+            delete textChunks[idx]
+          }
+          if (inputChunks[idx]) {
+            block.input = inputChunks[idx].join('')
+            delete inputChunks[idx]
+          }
+          if (thinkingChunks[idx]) {
+            block.thinking = thinkingChunks[idx].join('')
+            delete thinkingChunks[idx]
+          }
 
           const message: AssistantMessage = {
             message: {

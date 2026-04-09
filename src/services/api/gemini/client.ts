@@ -56,16 +56,35 @@ export async function* streamGeminiGenerateContent(params: {
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
-  let buffer = ''
+
+  // Use an array of chunks + lazy join to avoid O(n²) string concatenation.
+  // Each read() appends to the array; we only join when scanning for frames.
+  let bufferChunks: string[] = []
+  let bufferLen = 0
+
+  function getBuffer(): string {
+    if (bufferChunks.length === 1) return bufferChunks[0]!
+    const joined = bufferChunks.join('')
+    bufferChunks = [joined]
+    return joined
+  }
 
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
 
-      buffer += decoder.decode(value, STREAM_DECODE_OPTS)
+      const chunk = decoder.decode(value, STREAM_DECODE_OPTS)
+      bufferChunks.push(chunk)
+      bufferLen += chunk.length
+
+      // Only attempt to parse when we've seen at least one double-newline
+      if (chunk.indexOf('\n\n') === -1 && bufferLen < 65536) continue
+
+      const buffer = getBuffer()
       const { frames, remaining } = parseSSEFrames(buffer)
-      buffer = remaining
+      bufferChunks = remaining ? [remaining] : []
+      bufferLen = remaining.length
 
       for (const frame of frames) {
         if (!frame.data || frame.data === '[DONE]') continue
@@ -79,16 +98,23 @@ export async function* streamGeminiGenerateContent(params: {
       }
     }
 
-    buffer += decoder.decode()
-    const { frames } = parseSSEFrames(buffer)
-    for (const frame of frames) {
-      if (!frame.data || frame.data === '[DONE]') continue
-      try {
-        yield JSON.parse(frame.data) as GeminiStreamChunk
-      } catch (error) {
-        throw new Error(
-          `Failed to parse trailing Gemini SSE payload: ${errorMessage(error)}`,
-        )
+    // Flush remaining
+    const lastChunk = decoder.decode()
+    if (lastChunk) {
+      bufferChunks.push(lastChunk)
+    }
+    if (bufferChunks.length > 0) {
+      const buffer = getBuffer()
+      const { frames } = parseSSEFrames(buffer)
+      for (const frame of frames) {
+        if (!frame.data || frame.data === '[DONE]') continue
+        try {
+          yield JSON.parse(frame.data) as GeminiStreamChunk
+        } catch (error) {
+          throw new Error(
+            `Failed to parse trailing Gemini SSE payload: ${errorMessage(error)}`,
+          )
+        }
       }
     }
   } finally {

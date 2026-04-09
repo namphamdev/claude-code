@@ -60,7 +60,10 @@ export function isOpenAIThinkingEnabled(model: string): boolean {
   if (isEnvTruthy(process.env.OPENAI_ENABLE_THINKING)) return true
   // Auto-detect from model name (deepseek-reasoner and DeepSeek-V3.2 support thinking mode)
   const modelLower = model.toLowerCase()
-  return modelLower.includes('deepseek-reasoner') || modelLower.includes('deepseek-v3.2')
+  return (
+    modelLower.includes('deepseek-reasoner') ||
+    modelLower.includes('deepseek-v3.2')
+  )
 }
 
 /**
@@ -83,7 +86,14 @@ export function buildOpenAIRequestBody(params: {
   enableThinking: boolean
   temperatureOverride?: number
 }): Record<string, any> {
-  const { model, messages, tools, toolChoice, enableThinking, temperatureOverride } = params
+  const {
+    model,
+    messages,
+    tools,
+    toolChoice,
+    enableThinking,
+    temperatureOverride,
+  } = params
   return {
     model,
     messages,
@@ -104,9 +114,10 @@ export function buildOpenAIRequestBody(params: {
     }),
     // Only send temperature when thinking mode is off (DeepSeek ignores it anyway,
     // but other providers may respect it)
-    ...(!enableThinking && temperatureOverride !== undefined && {
-      temperature: temperatureOverride,
-    }),
+    ...(!enableThinking &&
+      temperatureOverride !== undefined && {
+        temperature: temperatureOverride,
+      }),
   }
 }
 
@@ -192,9 +203,13 @@ export async function* queryModelOpenAI(
 
     // 8. Convert messages and tools to OpenAI format
     const enableThinking = isOpenAIThinkingEnabled(openaiModel)
-    const openaiMessages = anthropicMessagesToOpenAI(messagesForAPI, systemPrompt, {
-      enableThinking,
-    })
+    const openaiMessages = anthropicMessagesToOpenAI(
+      messagesForAPI,
+      systemPrompt,
+      {
+        enableThinking,
+      },
+    )
     const openaiTools = anthropicToolsToOpenAI(standardTools)
     const openaiToolChoice = anthropicToolChoiceToOpenAI(options.toolChoice)
 
@@ -232,17 +247,19 @@ export async function* queryModelOpenAI(
       enableThinking,
       temperatureOverride: options.temperatureOverride,
     })
-    const stream = await client.chat.completions.create(
-      requestBody,
-      { signal },
-    )
+    const stream = await client.chat.completions.create(requestBody, { signal })
 
     // 12. Convert OpenAI stream to Anthropic events, then process into
     //     AssistantMessage + StreamEvent (matching the Anthropic path behavior)
     const adaptedStream = adaptOpenAIStreamToAnthropic(stream, openaiModel)
 
     // Accumulate content blocks and usage, same as the Anthropic path in claude.ts
+    // Use arrays for string accumulation to avoid O(n²) concatenation on large tool inputs
     const contentBlocks: Record<number, any> = {}
+    // Parallel arrays for chunk-based accumulation (joined at content_block_stop)
+    const textChunks: Record<number, string[]> = {}
+    const inputChunks: Record<number, string[]> = {}
+    const thinkingChunks: Record<number, string[]> = {}
     let partialMessage: any
     let usage = {
       input_tokens: 0,
@@ -271,10 +288,13 @@ export async function* queryModelOpenAI(
           const cb = (event as any).content_block
           if (cb.type === 'tool_use') {
             contentBlocks[idx] = { ...cb, input: '' }
+            inputChunks[idx] = []
           } else if (cb.type === 'text') {
             contentBlocks[idx] = { ...cb, text: '' }
+            textChunks[idx] = []
           } else if (cb.type === 'thinking') {
             contentBlocks[idx] = { ...cb, thinking: '', signature: '' }
+            thinkingChunks[idx] = []
           } else {
             contentBlocks[idx] = { ...cb }
           }
@@ -286,11 +306,11 @@ export async function* queryModelOpenAI(
           const block = contentBlocks[idx]
           if (!block) break
           if (delta.type === 'text_delta') {
-            block.text = (block.text || '') + delta.text
+            textChunks[idx]?.push(delta.text)
           } else if (delta.type === 'input_json_delta') {
-            block.input = (block.input || '') + delta.partial_json
+            inputChunks[idx]?.push(delta.partial_json)
           } else if (delta.type === 'thinking_delta') {
-            block.thinking = (block.thinking || '') + delta.thinking
+            thinkingChunks[idx]?.push(delta.thinking)
           } else if (delta.type === 'signature_delta') {
             block.signature = delta.signature
           }
@@ -300,6 +320,20 @@ export async function* queryModelOpenAI(
           const idx = (event as any).index
           const block = contentBlocks[idx]
           if (!block || !partialMessage) break
+
+          // Join accumulated chunks into final strings
+          if (textChunks[idx]) {
+            block.text = textChunks[idx].join('')
+            delete textChunks[idx]
+          }
+          if (inputChunks[idx]) {
+            block.input = inputChunks[idx].join('')
+            delete inputChunks[idx]
+          }
+          if (thinkingChunks[idx]) {
+            block.thinking = thinkingChunks[idx].join('')
+            delete thinkingChunks[idx]
+          }
 
           const m: AssistantMessage = {
             message: {

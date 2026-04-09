@@ -75,22 +75,35 @@ export function parseSSEFrames(buffer: string): {
     const frame: SSEFrame = {}
     let isComment = false
 
-    for (const line of rawFrame.split('\n')) {
-      if (line.startsWith(':')) {
+    // Parse lines without split() to avoid allocating an intermediate array.
+    // SSE frames are typically small (1-3 lines), so the linear scan is fast.
+    let lineStart = 0
+    const len = rawFrame.length
+    while (lineStart <= len) {
+      let lineEnd = rawFrame.indexOf('\n', lineStart)
+      if (lineEnd === -1) lineEnd = len
+
+      // Process line [lineStart, lineEnd)
+      if (rawFrame.charCodeAt(lineStart) === 58 /* ':' */) {
         // SSE comment (e.g., `:keepalive`)
         isComment = true
+        lineStart = lineEnd + 1
         continue
       }
 
-      const colonIdx = line.indexOf(':')
-      if (colonIdx === -1) continue
+      const colonIdx = rawFrame.indexOf(':', lineStart)
+      if (colonIdx === -1 || colonIdx >= lineEnd) {
+        lineStart = lineEnd + 1
+        continue
+      }
 
-      const field = line.slice(0, colonIdx)
+      const field = rawFrame.slice(lineStart, colonIdx)
       // Per SSE spec, strip one leading space after colon if present
-      const value =
-        line[colonIdx + 1] === ' '
-          ? line.slice(colonIdx + 2)
-          : line.slice(colonIdx + 1)
+      const valueStart =
+        rawFrame.charCodeAt(colonIdx + 1) === 32 /* ' ' */
+          ? colonIdx + 2
+          : colonIdx + 1
+      const value = rawFrame.slice(valueStart, lineEnd)
 
       switch (field) {
         case 'event':
@@ -105,6 +118,8 @@ export function parseSSEFrames(buffer: string): {
           break
         // Ignore other fields (retry:, etc.)
       }
+
+      lineStart = lineEnd + 1
     }
 
     // Only emit frames that have data (or are pure comments which reset liveness)
@@ -471,9 +486,9 @@ export class SSETransport implements Transport {
   private handleConnectionError(): void {
     rcLog(
       `SSE handleConnectionError: state=${this.state}` +
-      ` lastSeqNum=${this.getLastSequenceNum()}` +
-      ` reconnectAttempts=${this.reconnectAttempts}` +
-      ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` reconnectAttempts=${this.reconnectAttempts}` +
+        ` msSinceLastActivity=${this.lastActivityTime > 0 ? Date.now() - this.lastActivityTime : -1}`,
     )
     this.clearLivenessTimer()
 
@@ -507,7 +522,7 @@ export class SSETransport implements Transport {
       this.reconnectAttempts++
 
       const baseDelay = Math.min(
-        RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1),
+        RECONNECT_BASE_DELAY_MS * 2 ** (this.reconnectAttempts - 1),
         RECONNECT_MAX_DELAY_MS,
       )
       // Add ±25% jitter
@@ -550,8 +565,8 @@ export class SSETransport implements Transport {
     this.livenessTimer = null
     rcLog(
       `SSE liveness timeout (${LIVENESS_TIMEOUT_MS}ms)` +
-      ` lastSeqNum=${this.getLastSequenceNum()}` +
-      ` state=${this.state}`,
+        ` lastSeqNum=${this.getLastSequenceNum()}` +
+        ` state=${this.state}`,
     )
     logForDebugging('SSETransport: Liveness timeout, reconnecting', {
       level: 'error',
@@ -657,7 +672,7 @@ export class SSETransport implements Transport {
       }
 
       const delayMs = Math.min(
-        POST_BASE_DELAY_MS * Math.pow(2, attempt - 1),
+        POST_BASE_DELAY_MS * 2 ** (attempt - 1),
         POST_MAX_DELAY_MS,
       )
       await sleep(delayMs)

@@ -1817,7 +1817,12 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
-  let usage: NonNullableUsage = EMPTY_USAGE
+  let usage: NonNullableUsage = {
+    ...EMPTY_USAGE,
+    server_tool_use: { ...EMPTY_USAGE.server_tool_use },
+    cache_creation: { ...EMPTY_USAGE.cache_creation },
+    iterations: [],
+  }
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
   let didFallBackToNonStreaming = false
@@ -1916,7 +1921,12 @@ async function* queryModel(
     ttftMs = 0
     partialMessage = undefined
     contentBlocks.length = 0
-    usage = EMPTY_USAGE
+    usage = {
+      ...EMPTY_USAGE,
+      server_tool_use: { ...EMPTY_USAGE.server_tool_use },
+      cache_creation: { ...EMPTY_USAGE.cache_creation },
+      iterations: [],
+    }
     stopReason = null
     isAdvisorInProgress = false
 
@@ -2992,64 +3002,75 @@ export function updateUsage(
   partUsage: BetaMessageDeltaUsage | undefined,
 ): NonNullableUsage {
   if (!partUsage) {
-    return { ...usage }
+    return usage as NonNullableUsage
   }
-  return {
-    input_tokens:
-      partUsage.input_tokens !== null && partUsage.input_tokens > 0
-        ? partUsage.input_tokens
-        : usage.input_tokens,
-    cache_creation_input_tokens:
-      partUsage.cache_creation_input_tokens !== null &&
-      partUsage.cache_creation_input_tokens > 0
-        ? partUsage.cache_creation_input_tokens
-        : usage.cache_creation_input_tokens,
-    cache_read_input_tokens:
-      partUsage.cache_read_input_tokens !== null &&
-      partUsage.cache_read_input_tokens > 0
-        ? partUsage.cache_read_input_tokens
-        : usage.cache_read_input_tokens,
-    output_tokens: partUsage.output_tokens ?? usage.output_tokens,
-    server_tool_use: {
-      web_search_requests:
-        partUsage.server_tool_use?.web_search_requests ??
-        usage.server_tool_use.web_search_requests,
-      web_fetch_requests:
-        partUsage.server_tool_use?.web_fetch_requests ??
-        usage.server_tool_use.web_fetch_requests,
-    },
-    service_tier: usage.service_tier,
-    cache_creation: {
-      // SDK type BetaMessageDeltaUsage is missing cache_creation, but it's real!
-      ephemeral_1h_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_1h_input_tokens ??
-        usage.cache_creation.ephemeral_1h_input_tokens,
-      ephemeral_5m_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_5m_input_tokens ??
-        usage.cache_creation.ephemeral_5m_input_tokens,
-    },
-    // cache_deleted_input_tokens: returned by the API when cache editing
-    // deletes KV cache content, but not in SDK types. Kept off NonNullableUsage
-    // so the string is eliminated from external builds by dead code elimination.
-    // Uses the same > 0 guard as other token fields to prevent message_delta
-    // from overwriting the real value with 0.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            (partUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens != null &&
-            (partUsage as unknown as { cache_deleted_input_tokens: number })
-              .cache_deleted_input_tokens > 0
-              ? (partUsage as unknown as { cache_deleted_input_tokens: number })
-                  .cache_deleted_input_tokens
-              : ((usage as unknown as { cache_deleted_input_tokens?: number })
-                  .cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
-    inference_geo: usage.inference_geo,
-    iterations: partUsage.iterations ?? usage.iterations,
-    speed: (partUsage as BetaUsage).speed ?? usage.speed,
+
+  // Mutate-in-place when the caller already owns the object (hot path).
+  // The only callers are the streaming loops in this file, which create
+  // `usage` as a local and never share it. Avoiding a fresh object per
+  // chunk eliminates ~2 allocations × hundreds of chunks per response.
+  const out = usage as NonNullableUsage
+
+  if (partUsage.input_tokens !== null && partUsage.input_tokens > 0) {
+    out.input_tokens = partUsage.input_tokens
   }
+  if (
+    partUsage.cache_creation_input_tokens !== null &&
+    partUsage.cache_creation_input_tokens > 0
+  ) {
+    out.cache_creation_input_tokens = partUsage.cache_creation_input_tokens
+  }
+  if (
+    partUsage.cache_read_input_tokens !== null &&
+    partUsage.cache_read_input_tokens > 0
+  ) {
+    out.cache_read_input_tokens = partUsage.cache_read_input_tokens
+  }
+  if (partUsage.output_tokens != null) {
+    out.output_tokens = partUsage.output_tokens
+  }
+
+  const stu = partUsage.server_tool_use
+  if (stu) {
+    if (stu.web_search_requests != null) {
+      out.server_tool_use.web_search_requests = stu.web_search_requests
+    }
+    if (stu.web_fetch_requests != null) {
+      out.server_tool_use.web_fetch_requests = stu.web_fetch_requests
+    }
+  }
+
+  const partAsUsage = partUsage as BetaUsage
+  if (partAsUsage.cache_creation) {
+    if (partAsUsage.cache_creation.ephemeral_1h_input_tokens != null) {
+      out.cache_creation.ephemeral_1h_input_tokens =
+        partAsUsage.cache_creation.ephemeral_1h_input_tokens
+    }
+    if (partAsUsage.cache_creation.ephemeral_5m_input_tokens != null) {
+      out.cache_creation.ephemeral_5m_input_tokens =
+        partAsUsage.cache_creation.ephemeral_5m_input_tokens
+    }
+  }
+
+  if (feature('CACHED_MICROCOMPACT')) {
+    const partCDIT = (
+      partUsage as unknown as { cache_deleted_input_tokens?: number }
+    ).cache_deleted_input_tokens
+    if (partCDIT != null && partCDIT > 0) {
+      ;(
+        out as unknown as { cache_deleted_input_tokens: number }
+      ).cache_deleted_input_tokens = partCDIT
+    }
+  }
+
+  if (partUsage.iterations != null) {
+    out.iterations = partUsage.iterations
+  }
+  if (partAsUsage.speed != null) {
+    out.speed = partAsUsage.speed
+  }
+
+  return out
 }
 
 /**

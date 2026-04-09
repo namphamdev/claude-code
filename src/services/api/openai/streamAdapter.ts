@@ -32,8 +32,11 @@ export async function* adaptOpenAIStreamToAnthropic(
   let started = false
   let currentContentIndex = -1
 
-  // Track tool_use blocks: tool_calls index → { contentIndex, id, name, arguments }
-  const toolBlocks = new Map<number, { contentIndex: number; id: string; name: string; arguments: string }>()
+  // Track tool_use blocks: tool_calls index → { contentIndex, id, name, argChunks }
+  const toolBlocks = new Map<
+    number,
+    { contentIndex: number; id: string; name: string; argChunks: string[] }
+  >()
 
   // Track thinking block state
   let thinkingBlockOpen = false
@@ -185,14 +188,15 @@ export async function* adaptOpenAIStreamToAnthropic(
 
           // Start new tool_use block
           currentContentIndex++
-          const toolId = tc.id || `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
+          const toolId =
+            tc.id || `toolu_${randomUUID().replace(/-/g, '').slice(0, 24)}`
           const toolName = tc.function?.name || ''
 
           toolBlocks.set(tcIndex, {
             contentIndex: currentContentIndex,
             id: toolId,
             name: toolName,
-            arguments: '',
+            argChunks: [],
           })
           openBlockIndices.add(currentContentIndex)
 
@@ -211,7 +215,7 @@ export async function* adaptOpenAIStreamToAnthropic(
         // Stream argument fragments
         const argFragment = tc.function?.arguments
         if (argFragment) {
-          toolBlocks.get(tcIndex)!.arguments += argFragment
+          toolBlocks.get(tcIndex)!.argChunks.push(argFragment)
           yield {
             type: 'content_block_delta',
             index: toolBlocks.get(tcIndex)!.contentIndex,
@@ -262,7 +266,9 @@ export async function* adaptOpenAIStreamToAnthropic(
       // force "tool_use" when we saw any tool blocks to ensure the query
       // loop actually executes the tools.
       const hasToolCalls = toolBlocks.size > 0
-      const stopReason = hasToolCalls ? 'tool_use' : mapFinishReason(choice.finish_reason)
+      const stopReason = hasToolCalls
+        ? 'tool_use'
+        : mapFinishReason(choice.finish_reason)
 
       yield {
         type: 'message_delta',
