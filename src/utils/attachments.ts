@@ -803,11 +803,12 @@ export async function getAttachments(
         !options?.skipSkillDiscovery
           ? [
               maybe('skill_discovery', async () => {
-                const result = await skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
-                  input,
-                  messages ?? [],
-                  context,
-                )
+                const result =
+                  await skillSearchModules.prefetch.getTurnZeroSkillDiscovery(
+                    input,
+                    messages ?? [],
+                    context,
+                  )
                 return result ? [result] : []
               }),
             ]
@@ -996,11 +997,13 @@ export async function getAttachments(
 
   clearTimeout(timeoutId)
   // Defensive: a getter leaking [undefined] crashes .map(a => a.type) below.
-  return ([
-    ...userAttachmentResults.flat(),
-    ...threadAttachmentResults.flat(),
-    ...mainThreadAttachmentResults.flat(),
-  ] as Attachment[]).filter(a => a !== undefined && a !== null)
+  return (
+    [
+      ...userAttachmentResults.flat(),
+      ...threadAttachmentResults.flat(),
+      ...mainThreadAttachmentResults.flat(),
+    ] as Attachment[]
+  ).filter(a => a !== undefined && a !== null)
 }
 
 async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
@@ -1008,18 +1011,11 @@ async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
   try {
     const result = await f()
     const duration = Date.now() - startTime
-    // Log only 5% of events to reduce volume
-    if (Math.random() < 0.05) {
-      // jsonStringify(undefined) returns undefined, so .length would throw
-      const attachmentSizeBytes = result
-        .filter(a => a !== undefined && a !== null)
-        .reduce((total, attachment) => {
-          return total + jsonStringify(attachment).length
-        }, 0)
+    // Log only 5% of events to reduce volume, and skip serialization for empty results
+    if (Math.random() < 0.05 && duration > 1) {
       logEvent('tengu_attachment_compute_duration', {
         label,
         duration_ms: duration,
-        attachment_size_bytes: attachmentSizeBytes,
         attachment_count: result.length,
       } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
     }
@@ -1750,7 +1746,6 @@ export function memoryFilesToAttachments(
         isPartialView: memoryFile.contentDiffersFromDisk,
       })
 
-
       // Fire InstructionsLoaded hook for audit/observability (fire-and-forget)
       if (shouldFireHook && isInstructionsMemoryType(memoryFile.type)) {
         const loadReason = memoryFile.globs
@@ -2257,7 +2252,11 @@ export function collectSurfacedMemories(messages: ReadonlyArray<Message>): {
   let totalBytes = 0
   for (const m of messages) {
     if (m.type === 'attachment' && m.attachment.type === 'relevant_memories') {
-      for (const mem of m.attachment.memories as { path: string; content: string; mtimeMs: number }[]) {
+      for (const mem of m.attachment.memories as {
+        path: string
+        content: string
+        mtimeMs: number
+      }[]) {
         paths.add(mem.path)
         totalBytes += mem.content.length
       }
@@ -2502,7 +2501,6 @@ export function collectRecentSuccessfulTools(
   }
   return [...succeeded].filter(t => !failed.has(t))
 }
-
 
 /**
  * Filters prefetched memory attachments to exclude memories the model already
@@ -3982,7 +3980,6 @@ export function getContextEfficiencyAttachment(
 
   return [{ type: 'context_efficiency' }]
 }
-
 
 function isFileReadDenied(
   filePath: string,

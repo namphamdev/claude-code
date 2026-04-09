@@ -26,7 +26,7 @@ const SleepTool =
   feature('PROACTIVE') || feature('KAIROS')
     ? require('./tools/SleepTool/SleepTool.js').SleepTool
     : null
-const cronTools = [
+const getCronTools = () => [
   require('./tools/ScheduleCronTool/CronCreateTool.js').CronCreateTool,
   require('./tools/ScheduleCronTool/CronDeleteTool.js').CronDeleteTool,
   require('./tools/ScheduleCronTool/CronListTool.js').CronListTool,
@@ -230,7 +230,7 @@ export function getAllBaseTools(): Tools {
     ...(process.env.USER_TYPE === 'ant' && REPLTool ? [REPLTool] : []),
     ...(WorkflowTool ? [WorkflowTool] : []),
     ...(SleepTool ? [SleepTool] : []),
-    ...cronTools,
+    ...getCronTools(),
     ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),
     ...(MonitorTool ? [MonitorTool] : []),
     BriefTool,

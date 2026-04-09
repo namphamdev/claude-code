@@ -439,7 +439,7 @@ function configureEffortParams(
     betas.push(EFFORT_BETA_HEADER)
   } else if (typeof effortValue === 'string') {
     // Send string effort level as is
-    outputConfig.effort = effortValue as "high" | "medium" | "low" | "max"
+    outputConfig.effort = effortValue as 'high' | 'medium' | 'low' | 'max'
     betas.push(EFFORT_BETA_HEADER)
   } else if (process.env.USER_TYPE === 'ant') {
     // Numeric effort override - ant-only (uses anthropic_internal)
@@ -678,12 +678,10 @@ function stripGeminiProviderMetadata<T extends BetaContentBlockParam | string>(
     return contentBlock
   }
 
-  const {
-    _geminiThoughtSignature: _unusedGeminiThoughtSignature,
-    ...rest
-  } = contentBlock as T & {
-    _geminiThoughtSignature?: string
-  }
+  const { _geminiThoughtSignature: _unusedGeminiThoughtSignature, ...rest } =
+    contentBlock as T & {
+      _geminiThoughtSignature?: string
+    }
   return rest as T
 }
 
@@ -1333,7 +1331,13 @@ async function* queryModel(
   // media stripping) but before Anthropic-specific logic (betas, thinking, caching).
   if (getAPIProvider() === 'openai') {
     const { queryModelOpenAI } = await import('./openai/index.js')
-    yield* queryModelOpenAI(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    yield* queryModelOpenAI(
+      messagesForAPI,
+      systemPrompt,
+      filteredTools,
+      signal,
+      options,
+    )
     return
   }
 
@@ -1352,7 +1356,13 @@ async function* queryModel(
 
   if (getAPIProvider() === 'grok') {
     const { queryModelGrok } = await import('./grok/index.js')
-    yield* queryModelGrok(messagesForAPI, systemPrompt, filteredTools, signal, options)
+    yield* queryModelGrok(
+      messagesForAPI,
+      systemPrompt,
+      filteredTools,
+      signal,
+      options,
+    )
     return
   }
 
@@ -1548,11 +1558,11 @@ async function* queryModel(
   let start = Date.now()
   let attemptNumber = 0
   const attemptStartTimes: number[] = []
-  let stream: Stream<BetaRawMessageStreamEvent> | undefined = undefined
-  let streamRequestId: string | null | undefined = undefined
-  let clientRequestId: string | undefined = undefined
+  let stream: Stream<BetaRawMessageStreamEvent> | undefined
+  let streamRequestId: string | null | undefined
+  let clientRequestId: string | undefined
   // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins -- Response is available in Node 18+ and is used by the SDK
-  let streamResponse: Response | undefined = undefined
+  let streamResponse: Response | undefined
 
   // Release all stream resources to prevent native memory leaks.
   // The Response object holds native TLS/socket buffers that live outside the
@@ -1638,7 +1648,7 @@ async function* queryModel(
     const hasThinking =
       thinkingConfig.type !== 'disabled' &&
       !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_THINKING)
-    let thinking: BetaMessageStreamParams['thinking'] | undefined = undefined
+    let thinking: BetaMessageStreamParams['thinking'] | undefined
 
     // IMPORTANT: Do not change the adaptive-vs-budget thinking selection below
     // without notifying the model launch DRI and research. This is a sensitive
@@ -1770,19 +1780,22 @@ async function* queryModel(
     }
   }
 
-  // Compute log scalars synchronously so the fire-and-forget .then() closure
-  // captures only primitives instead of paramsFromContext's full closure scope
-  // (messagesForAPI, system, allTools, betas — the entire request-building
-  // context), which would otherwise be pinned until the promise resolves.
+  // Compute log scalars directly without rebuilding the full params object.
+  // The previous approach called paramsFromContext() just to extract 4 scalars,
+  // which triggered addCacheBreakpoints (full message array rebuild) unnecessarily.
   {
-    const queryParams = paramsFromContext({
-      model: options.model,
-      thinkingConfig,
-    })
-    const logMessagesLength = queryParams.messages.length
-    const logBetas = useBetas ? (queryParams.betas ?? []) : []
-    const logThinkingType = queryParams.thinking?.type ?? 'disabled'
-    const logEffortValue = queryParams.output_config?.effort
+    const logMessagesLength = messagesForAPI.length
+    const logBetas = useBetas ? betas : []
+    const logThinkingType =
+      thinkingConfig.type !== 'disabled' &&
+      !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_THINKING) &&
+      modelSupportsThinking(options.model)
+        ? !isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING) &&
+          modelSupportsAdaptiveThinking(options.model)
+          ? 'adaptive'
+          : 'enabled'
+        : 'disabled'
+    const logEffortValue = effort
     void options.getToolPermissionContext().then(permissionContext => {
       logAPIQuery({
         model: options.model,
@@ -1802,7 +1815,7 @@ async function* queryModel(
 
   const newMessages: AssistantMessage[] = []
   let ttftMs = 0
-  let partialMessage: BetaMessage | undefined = undefined
+  let partialMessage: BetaMessage | undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
   let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
@@ -1810,8 +1823,8 @@ async function* queryModel(
   let didFallBackToNonStreaming = false
   let fallbackMessage: AssistantMessage | undefined
   let maxOutputTokens = 0
-  let responseHeaders: globalThis.Headers | undefined = undefined
-  let research: unknown = undefined
+  let responseHeaders: globalThis.Headers | undefined
+  let research: unknown
   let isFastModeRequest = isFastMode // Keep separate state as it may change if falling back
   let isAdvisorInProgress = false
 
@@ -2120,7 +2133,8 @@ async function* queryModel(
                 })
                 throw new Error('Content block is not a connector_text block')
               }
-              ;(contentBlock as { connector_text: string }).connector_text += delta.connector_text
+              ;(contentBlock as { connector_text: string }).connector_text +=
+                delta.connector_text
             } else {
               switch (delta.type) {
                 case 'citations_delta':
@@ -2199,7 +2213,8 @@ async function* queryModel(
                     })
                     throw new Error('Content block is not a thinking block')
                   }
-                  ;(contentBlock as { thinking: string }).thinking += delta.thinking
+                  ;(contentBlock as { thinking: string }).thinking +=
+                    delta.thinking
                   break
               }
             }
@@ -2290,7 +2305,10 @@ async function* queryModel(
             }
 
             // Update cost
-            const costUSDForPart = calculateUSDCost(resolvedModel, usage as unknown as BetaUsage)
+            const costUSDForPart = calculateUSDCost(
+              resolvedModel,
+              usage as unknown as BetaUsage,
+            )
             costUSD += addToTotalSessionCost(
               costUSDForPart,
               usage as unknown as BetaUsage,
@@ -2860,10 +2878,14 @@ async function* queryModel(
     // message_delta handler before any yield. Fallback pushes to newMessages
     // then yields, so tracking must be here to survive .return() at the yield.
     if (fallbackMessage) {
-      const fallbackUsage = fallbackMessage.message.usage as BetaMessageDeltaUsage
+      const fallbackUsage = fallbackMessage.message
+        .usage as BetaMessageDeltaUsage
       usage = updateUsage(EMPTY_USAGE, fallbackUsage)
       stopReason = fallbackMessage.message.stop_reason as BetaStopReason
-      const fallbackCost = calculateUSDCost(resolvedModel, fallbackUsage as unknown as BetaUsage)
+      const fallbackCost = calculateUSDCost(
+        resolvedModel,
+        fallbackUsage as unknown as BetaUsage,
+      )
       costUSD += addToTotalSessionCost(
         fallbackCost,
         fallbackUsage as unknown as BetaUsage,
@@ -2899,7 +2921,9 @@ async function* queryModel(
   void options.getToolPermissionContext().then(permissionContext => {
     logAPISuccessAndDuration({
       model:
-        (newMessages[0]?.message.model as string | undefined) ?? partialMessage?.model ?? options.model,
+        (newMessages[0]?.message.model as string | undefined) ??
+        partialMessage?.model ??
+        options.model,
       preNormalizedModel: options.model,
       usage,
       start,

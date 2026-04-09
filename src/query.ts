@@ -47,6 +47,7 @@ import {
   createUserMessage,
   createUserInterruptionMessage,
   normalizeMessagesForAPI,
+  normalizeSingleToolResultForAPI,
   createSystemMessage,
   createAssistantAPIErrorMessage,
   getMessagesAfterCompactBoundary,
@@ -126,7 +127,11 @@ function* yieldMissingToolResultBlocks(
 ) {
   for (const assistantMessage of assistantMessages) {
     // Extract all tool use blocks from this assistant message
-    const toolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+    const toolUseBlocks = (
+      Array.isArray(assistantMessage.message?.content)
+        ? assistantMessage.message.content
+        : []
+    ).filter(
       (content: { type: string }) => content.type === 'tool_use',
     ) as ToolUseBlock[]
 
@@ -288,7 +293,7 @@ async function* queryLoop(
   // multiple compacts: each subtracts the final context at that compact's
   // trigger point. Loop-local (not on State) to avoid touching the 7 continue
   // sites.
-  let taskBudgetRemaining: number | undefined = undefined
+  let taskBudgetRemaining: number | undefined
 
   // Snapshot immutable env/statsig/session state once at entry. See QueryConfig
   // for what's included and why feature() gates are intentionally excluded.
@@ -302,6 +307,16 @@ async function* queryLoop(
     state.messages,
     state.toolUseContext,
   )
+
+  // Create fetch wrapper once per query session to avoid memory retention.
+  // Each call to createDumpPromptsFetch creates a closure that captures the request body.
+  // Creating it once means only the latest request body is retained (~700KB),
+  // instead of all request bodies from the session (~500MB for long sessions).
+  // Note: agentId is effectively constant during a query() call - it only changes
+  // between queries (e.g., /clear command or session resume).
+  const dumpPromptsFetch = config.gates.isAnt
+    ? createDumpPromptsFetch(state.toolUseContext.agentId ?? config.sessionId)
+    : undefined
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -362,7 +377,7 @@ async function* queryLoop(
       queryTracking,
     }
 
-    let messagesForQuery = [...getMessagesAfterCompactBoundary(messages)]
+    let messagesForQuery = getMessagesAfterCompactBoundary(messages)
 
     let tracking = autoCompactTracking
 
@@ -579,16 +594,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_setup_end')
 
-    // Create fetch wrapper once per query session to avoid memory retention.
-    // Each call to createDumpPromptsFetch creates a closure that captures the request body.
-    // Creating it once means only the latest request body is retained (~700KB),
-    // instead of all request bodies from the session (~500MB for long sessions).
-    // Note: agentId is effectively constant during a query() call - it only changes
-    // between queries (e.g., /clear command or session resume).
-    const dumpPromptsFetch = config.gates.isAnt
-      ? createDumpPromptsFetch(toolUseContext.agentId ?? config.sessionId)
-      : undefined
-
     // Block if we've hit the hard blocking limit (only applies when auto-compact is OFF)
     // This reserves space so users can still run /compact manually
     // Skip this check if compaction just happened - the compaction result is already
@@ -747,7 +752,14 @@ async function* queryLoop(
             let yieldMessage: typeof message = message
             if (message.type === 'assistant') {
               const assistantMsg = message as AssistantMessage
-              const contentArr = Array.isArray(assistantMsg.message?.content) ? assistantMsg.message.content as unknown as Array<{ type: string; input?: unknown; name?: string; [key: string]: unknown }> : []
+              const contentArr = Array.isArray(assistantMsg.message?.content)
+                ? (assistantMsg.message.content as unknown as Array<{
+                    type: string
+                    input?: unknown
+                    name?: string
+                    [key: string]: unknown
+                  }>)
+                : []
               let clonedContent: typeof contentArr | undefined
               for (let i = 0; i < contentArr.length; i++) {
                 const block = contentArr[i]!
@@ -783,7 +795,10 @@ async function* queryLoop(
               if (clonedContent) {
                 yieldMessage = {
                   ...message,
-                  message: { ...(assistantMsg.message ?? {}), content: clonedContent },
+                  message: {
+                    ...(assistantMsg.message ?? {}),
+                    content: clonedContent,
+                  },
                 } as typeof message
               }
             }
@@ -829,7 +844,11 @@ async function* queryLoop(
               const assistantMessage = message as AssistantMessage
               assistantMessages.push(assistantMessage)
 
-              const msgToolUseBlocks = (Array.isArray(assistantMessage.message?.content) ? assistantMessage.message.content : []).filter(
+              const msgToolUseBlocks = (
+                Array.isArray(assistantMessage.message?.content)
+                  ? assistantMessage.message.content
+                  : []
+              ).filter(
                 (content: { type: string }) => content.type === 'tool_use',
               ) as ToolUseBlock[]
               if (msgToolUseBlocks.length > 0) {
@@ -854,12 +873,13 @@ async function* queryLoop(
               for (const result of streamingToolExecutor.getCompletedResults()) {
                 if (result.message) {
                   yield result.message
-                  toolResults.push(
-                    ...normalizeMessagesForAPI(
-                      [result.message],
-                      toolUseContext.options.tools,
-                    ).filter(_ => _.type === 'user'),
+                  const normalized = normalizeSingleToolResultForAPI(
+                    result.message,
+                    toolUseContext.options.tools,
                   )
+                  if (normalized) {
+                    toolResults.push(normalized)
+                  }
                 }
               }
             }
@@ -962,7 +982,10 @@ async function* queryLoop(
       logEvent('tengu_query_error', {
         assistantMessages: assistantMessages.length,
         toolUses: assistantMessages.flatMap(_ =>
-          (Array.isArray(_.message?.content) ? _.message.content as Array<{ type: string }> : []).filter(content => content.type === 'tool_use'),
+          (Array.isArray(_.message?.content)
+            ? (_.message.content as Array<{ type: string }>)
+            : []
+          ).filter(content => content.type === 'tool_use'),
         ).length,
 
         queryChainId: queryChainIdForAnalytics,
@@ -1002,7 +1025,7 @@ async function* queryLoop(
     // Execute post-sampling hooks after model response is complete
     if (assistantMessages.length > 0) {
       void executePostSamplingHooks(
-        [...messagesForQuery, ...assistantMessages],
+        messagesForQuery.concat(assistantMessages),
         systemPrompt,
         userContext,
         systemContext,
@@ -1365,7 +1388,6 @@ async function* queryLoop(
 
     queryCheckpoint('query_tool_execution_start')
 
-
     if (streamingToolExecutor) {
       logEvent('tengu_streaming_tool_execution_used', {
         tool_count: toolUseBlocks.length,
@@ -1395,12 +1417,13 @@ async function* queryLoop(
           shouldPreventContinuation = true
         }
 
-        toolResults.push(
-          ...normalizeMessagesForAPI(
-            [update.message],
-            toolUseContext.options.tools,
-          ).filter(_ => _.type === 'user'),
+        const normalized = normalizeSingleToolResultForAPI(
+          update.message,
+          toolUseContext.options.tools,
         )
+        if (normalized) {
+          toolResults.push(normalized)
+        }
       }
       if (update.newContext) {
         updatedToolUseContext = {
@@ -1425,9 +1448,14 @@ async function* queryLoop(
       const lastAssistantMessage = assistantMessages.at(-1)
       let lastAssistantText: string | undefined
       if (lastAssistantMessage) {
-        const textBlocks = (Array.isArray(lastAssistantMessage.message?.content) ? lastAssistantMessage.message.content as Array<{ type: string; text?: string }> : []).filter(
-          block => block.type === 'text',
-        )
+        const textBlocks = (
+          Array.isArray(lastAssistantMessage.message?.content)
+            ? (lastAssistantMessage.message.content as Array<{
+                type: string
+                text?: string
+              }>)
+            : []
+        ).filter(block => block.type === 'text')
         if (textBlocks.length > 0) {
           const lastTextBlock = textBlocks.at(-1)
           if (lastTextBlock && 'text' in lastTextBlock) {
@@ -1438,26 +1466,22 @@ async function* queryLoop(
 
       // Collect tool info for summary generation
       const toolUseIds = toolUseBlocks.map(block => block.id)
-      const toolInfoForSummary = toolUseBlocks.map(block => {
-        // Find the corresponding tool result
-        const toolResult = toolResults.find(
-          result =>
-            result.type === 'user' &&
-            Array.isArray(result.message.content) &&
-            result.message.content.some(
-              content =>
-                content.type === 'tool_result' &&
-                content.tool_use_id === block.id,
-            ),
-        )
-        const resultContent =
-          toolResult?.type === 'user' &&
-          Array.isArray(toolResult.message.content)
-            ? toolResult.message.content.find(
-                (c): c is ToolResultBlockParam =>
-                  c.type === 'tool_result' && c.tool_use_id === block.id,
+      // Build a Map for O(1) tool result lookup instead of O(n²) find loop
+      const toolResultMap = new Map<string, ToolResultBlockParam>()
+      for (const result of toolResults) {
+        if (result.type === 'user' && Array.isArray(result.message.content)) {
+          for (const content of result.message.content) {
+            if (content.type === 'tool_result' && content.tool_use_id) {
+              toolResultMap.set(
+                content.tool_use_id,
+                content as ToolResultBlockParam,
               )
-            : undefined
+            }
+          }
+        }
+      }
+      const toolInfoForSummary = toolUseBlocks.map(block => {
+        const resultContent = toolResultMap.get(block.id)
         return {
           name: block.name,
           input: block.input,
@@ -1585,7 +1609,7 @@ async function* queryLoop(
       updatedToolUseContext,
       null,
       queuedCommandsSnapshot,
-      [...messagesForQuery, ...assistantMessages, ...toolResults],
+      messagesForQuery.concat(assistantMessages, toolResults),
       querySource,
     )) {
       yield attachment
@@ -1615,7 +1639,6 @@ async function* queryLoop(
       }
       pendingMemoryPrefetch.consumedOnIteration = turnCount - 1
     }
-
 
     // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
     // hidden_by_main_turn — true when the prefetch resolved before this point
@@ -1716,7 +1739,7 @@ async function* queryLoop(
 
     queryCheckpoint('query_recursive_call')
     const next: State = {
-      messages: [...messagesForQuery, ...assistantMessages, ...toolResults],
+      messages: messagesForQuery.concat(assistantMessages, toolResults),
       toolUseContext: toolUseContextWithQueryTracking,
       autoCompactTracking: tracking,
       turnCount: nextTurnCount,

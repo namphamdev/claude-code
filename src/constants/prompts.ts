@@ -497,9 +497,7 @@ ${CYBER_RISK_INSTRUCTION}`,
     systemPromptSection('ant_model_override', () =>
       getAntModelOverrideSection(),
     ),
-    systemPromptSection('env_info_simple', () =>
-      computeSimpleEnvInfo(model, additionalWorkingDirectories),
-    ),
+    systemPromptSection('env_info_simple', () => Promise.resolve(envInfo)),
     systemPromptSection('language', () =>
       getLanguageSection(settings.language),
     ),
