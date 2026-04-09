@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk bun:*)",
+      "Bash(bun test:*)",
+      "Bash(cd /d D:Devclaude-code-src)",
+      "Bash(rtk git:*)",
+      "Bash(cd:*)",
+      "Bash(dist/ccb.exe --version)"
+    ]
+  }
+}
