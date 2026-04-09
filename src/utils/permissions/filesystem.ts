@@ -30,7 +30,14 @@ import {
 } from '../path.js'
 import { getPlanSlug, getPlansDirectory } from '../plans.js'
 import { getPlatform } from '../platform.js'
-import { getProjectDir } from '../sessionStorage.js'
+// Lazy-imported to break circular dep: AppState → ... → filesystem → sessionStorage → gracefulShutdown → AppState
+let _getProjectDir: any
+function getProjectDir(cwd: string): string {
+  if (!_getProjectDir) {
+    _getProjectDir = require('../sessionStorage.js').getProjectDir
+  }
+  return _getProjectDir!(cwd)
+}
 import { SETTING_SOURCES } from '../settings/constants.js'
 import {
   getSettingsFilePathForSource,
@@ -1325,7 +1332,11 @@ export function checkWritePermissionForTool<Input extends AnyObject>(
           },
         ]
       : generateSuggestions(path, 'write', toolPermissionContext, pathsToCheck)
-    const failedCheck = safetyCheck as { safe: false; message: string; classifierApprovable: boolean }
+    const failedCheck = safetyCheck as {
+      safe: false
+      message: string
+      classifierApprovable: boolean
+    }
     return {
       behavior: 'ask',
       message: failedCheck.message,

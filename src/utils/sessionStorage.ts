@@ -30,9 +30,24 @@ import {
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
-import { builtInCommandNames } from '../commands.js'
+// Lazy-imported to avoid pulling in all ~50 command modules at startup
+let _builtInCommandNames: (() => Set<string>) | undefined
+function builtInCommandNames(): Set<string> {
+  if (!_builtInCommandNames) {
+    _builtInCommandNames = require('../commands.js').builtInCommandNames
+  }
+  return _builtInCommandNames!()
+}
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+// Lazy-imported to break circular dep: growthbook → config → ... → sessionStorage → growthbook
+let _getFeatureValue: any
+function getFeatureValue_CACHED_MAY_BE_STALE<T>(key: string, fallback: T): T {
+  if (!_getFeatureValue) {
+    _getFeatureValue =
+      require('../services/analytics/growthbook.js').getFeatureValue_CACHED_MAY_BE_STALE
+  }
+  return _getFeatureValue!(key, fallback)
+}
 import * as sessionIngress from '../services/api/sessionIngress.js'
 import { REPL_TOOL_NAME } from '../tools/REPLTool/constants.js'
 import {
@@ -4900,9 +4915,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         }
         return result
       }
-    } catch {
-      continue
-    }
+    } catch {}
   }
   // Session started with a slash command but had no subsequent real message —
   // use the clean command name so the session still appears in the resume picker

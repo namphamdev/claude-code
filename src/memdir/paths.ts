@@ -5,7 +5,15 @@ import {
   getIsNonInteractiveSession,
   getProjectRoot,
 } from '../bootstrap/state.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+// Lazy-imported to break circular dep: growthbook → config → memdir/paths → growthbook
+let _getFeatureValue: any
+function getFeatureValue_CACHED_MAY_BE_STALE<T>(key: string, fallback: T): T {
+  if (!_getFeatureValue) {
+    _getFeatureValue =
+      require('../services/analytics/growthbook.js').getFeatureValue_CACHED_MAY_BE_STALE
+  }
+  return _getFeatureValue!(key, fallback)
+}
 import {
   getClaudeConfigHomeDir,
   isEnvDefinedFalsy,

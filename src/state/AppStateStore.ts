@@ -8,7 +8,16 @@ import type {
   MCPServerConnection,
   ServerResource,
 } from '../services/mcp/types.js'
-import { shouldEnablePromptSuggestion } from '../services/PromptSuggestion/promptSuggestion.js'
+// Lazy-imported to avoid pulling in query.js → entire app at startup
+// shouldEnablePromptSuggestion → forkedAgent → query.js → (everything)
+let _shouldEnablePromptSuggestion: any
+function shouldEnablePromptSuggestion(): boolean {
+  if (!_shouldEnablePromptSuggestion) {
+    _shouldEnablePromptSuggestion =
+      require('../services/PromptSuggestion/promptSuggestion.js').shouldEnablePromptSuggestion
+  }
+  return _shouldEnablePromptSuggestion!()
+}
 import {
   getEmptyToolPermissionContext,
   type Tool,

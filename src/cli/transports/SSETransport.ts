@@ -89,7 +89,8 @@ export function parseSSEFrames(buffer: string): {
 
       // Strip trailing \r for CRLF streams
       const effectiveEnd =
-        lineEnd > lineStart && rawFrame.charCodeAt(lineEnd - 1) === 13 /* '\r' */
+        lineEnd > lineStart &&
+        rawFrame.charCodeAt(lineEnd - 1) === 13 /* '\r' */
           ? lineEnd - 1
           : lineEnd
 

@@ -31,7 +31,15 @@ import uniqBy from 'lodash-es/uniqBy.js';
 import React from 'react';
 import { getOauthConfig } from './constants/oauth.js';
 import { getRemoteSessionUrl } from './constants/product.js';
-import { getSystemContext, getUserContext } from './context.js';
+// Lazy-imported to avoid pulling in the entire app module graph at startup
+// context.ts → claudemd → memdir → sessionStorage → gracefulShutdown → AppState → ...
+let _context: any;
+function getContext() {
+  if (!_context) _context = require('./context.js');
+  return _context;
+}
+const getSystemContext = (...args: any[]) => getContext().getSystemContext(...args);
+const getUserContext = (...args: any[]) => getContext().getUserContext(...args);
 import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from '@anthropic/ink';

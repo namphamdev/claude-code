@@ -1,9 +1,13 @@
 import { join, normalize, sep } from 'path'
 import { getProjectRoot } from '../../bootstrap/state.js'
-import {
-  buildMemoryPrompt,
-  ensureMemoryDirExists,
-} from '../../memdir/memdir.js'
+// Lazy-imported to break circular dep: AppState → ... → agentMemory → memdir → sessionStorage → gracefulShutdown → AppState
+let _memdirMemdir: any
+function getMemdirMemdir() {
+  if (!_memdirMemdir) {
+    _memdirMemdir = require('../../memdir/memdir.js')
+  }
+  return _memdirMemdir!
+}
 import { getMemoryBaseDir } from '../../memdir/paths.js'
 import { getCwd } from '../../utils/cwd.js'
 import { findCanonicalGitRoot } from '../../utils/git.js'
@@ -162,11 +166,11 @@ export function loadAgentMemoryPrompt(
   // so it cannot be async). The spawned agent won't try to Write until after
   // a full API round-trip, by which time mkdir will have completed. Even if
   // it hasn't, FileWriteTool does its own mkdir of the parent directory.
-  void ensureMemoryDirExists(memoryDir)
+  void getMemdirMemdir().ensureMemoryDirExists(memoryDir)
 
   const coworkExtraGuidelines =
     process.env.CLAUDE_COWORK_MEMORY_EXTRA_GUIDELINES
-  return buildMemoryPrompt({
+  return getMemdirMemdir().buildMemoryPrompt({
     displayName: 'Persistent Agent Memory',
     memoryDir,
     extraGuidelines:

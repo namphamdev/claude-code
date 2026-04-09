@@ -9,12 +9,27 @@
 
 import chalk from 'chalk'
 import type { QuerySource } from '../../constants/querySource.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
+// Lazy-imported to break circular dep: bash/commands → shell/prefix → api/claude → (everything)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _getFeatureValue: any
+function getFeatureValue_CACHED_MAY_BE_STALE<T>(key: string, fallback: T): T {
+  if (!_getFeatureValue)
+    _getFeatureValue =
+      require('../../services/analytics/growthbook.js').getFeatureValue_CACHED_MAY_BE_STALE
+  return _getFeatureValue(key, fallback)
+}
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../../services/analytics/index.js'
-import { queryHaiku } from '../../services/api/claude.js'
+// Lazy-imported to avoid pulling in the full API client at startup
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _queryHaiku: any
+function queryHaiku(...args: any[]) {
+  if (!_queryHaiku)
+    _queryHaiku = require('../../services/api/claude.js').queryHaiku
+  return _queryHaiku(...args)
+}
 import { startsWithApiErrorPrefix } from '../../services/api/errors.js'
 import { memoizeWithLRU } from '../memoize.js'
 import { jsonStringify } from '../slowOperations.js'

@@ -12,7 +12,20 @@ import {
   MAX_TOOL_RESULT_BYTES,
   MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
 } from '../constants/toolLimits.js'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
+// Lazy-imported to break circular dep chains
+let _getFeatureValue: any
+function getFeatureValue_CACHED_MAY_BE_STALE<T>(key: string, fallback: T): T {
+  if (!_getFeatureValue)
+    _getFeatureValue =
+      require('../services/analytics/growthbook.js').getFeatureValue_CACHED_MAY_BE_STALE
+  return _getFeatureValue!(key, fallback)
+}
+let _getProjectDir: any
+function getProjectDir(cwd: string): string {
+  if (!_getProjectDir)
+    _getProjectDir = require('./sessionStorage.js').getProjectDir
+  return _getProjectDir!(cwd)
+}
 import { logEvent } from '../services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../services/analytics/metadata.js'
 import type { Message } from '../types/message.js'
@@ -20,7 +33,6 @@ import { logForDebugging } from './debug.js'
 import { getErrnoCode, toError } from './errors.js'
 import { formatFileSize } from './format.js'
 import { logError } from './log.js'
-import { getProjectDir } from './sessionStorage.js'
 import { jsonStringify } from './slowOperations.js'
 
 // Subdirectory name for tool results within a session
