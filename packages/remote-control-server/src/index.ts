@@ -5,6 +5,7 @@ import { serveStatic } from "hono/bun";
 import { config } from "./config";
 import { closeAllConnections } from "./transport/ws-handler";
 import { startDisconnectMonitor } from "./services/disconnect-monitor";
+import { isDirectWorkerAvailable, getWorkerConfig } from "./services/direct-worker";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -46,6 +47,15 @@ app.get("/code", serveStatic({ root: webDir, path: "index.html" }));
 app.get("/code/", serveStatic({ root: webDir, path: "index.html" }));
 app.get("/code/:sessionId", serveStatic({ root: webDir, path: "index.html" }));
 
+// React web-app — served under /app
+const webAppDir = resolve(__dirname, "../web-app/dist");
+const stripAppPrefix = (p: string) => p.replace(/^\/app/, "") || "/";
+
+app.use("/app/assets/*", serveStatic({ root: webAppDir, rewriteRequestPath: stripAppPrefix }));
+app.get("/app", serveStatic({ root: webAppDir, path: "index.html" }));
+app.get("/app/", serveStatic({ root: webAppDir, path: "index.html" }));
+app.get("/app/*", serveStatic({ root: webAppDir, path: "index.html" }));
+
 // v1 Environment routes
 app.route("/v1/environments", v1Environments);
 app.route("/v1/environments", v1EnvironmentsWork);
@@ -77,6 +87,13 @@ console.log(`[RCS] Remote Control Server starting on ${host}:${port}`);
 console.log("[RCS] API key configuration loaded");
 console.log(`[RCS] Base URL: ${config.baseUrl || `http://localhost:${port}`}`);
 console.log(`[RCS] Disconnect timeout: ${config.disconnectTimeout}s`);
+const workerCfg = getWorkerConfig();
+if (workerCfg.apiKey) {
+  console.log(`[RCS] Direct worker: enabled (model: ${workerCfg.model}, base: ${workerCfg.baseUrl})`);
+} else {
+  console.log(`[RCS] Direct worker: disabled (no API key found in env or ~/.claude/settings.json)`);
+}
+console.log(`[RCS] Web app: ${host}:${port}/app/`);
 
 // Start disconnect monitor
 startDisconnectMonitor();

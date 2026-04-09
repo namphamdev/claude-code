@@ -4,6 +4,7 @@ import { getSession, updateSessionStatus } from "../../services/session";
 import { publishSessionEvent } from "../../services/transport";
 import { getEventBus } from "../../transport/event-bus";
 import { storeIsSessionOwner } from "../../store";
+import { startDirectWorker, isDirectWorkerAvailable } from "../../services/direct-worker";
 
 const app = new Hono();
 
@@ -30,6 +31,12 @@ app.post("/sessions/:id/events", uuidAuth, async (c) => {
   const body = await c.req.json();
   const eventType = body.type || "user";
   console.log(`[RC-DEBUG] web -> server: POST /web/sessions/${sessionId}/events type=${eventType} content=${JSON.stringify(body).slice(0, 200)}`);
+
+  // Auto-start direct worker if available and no CLI bridge is connected
+  if (eventType === "user" && isDirectWorkerAvailable()) {
+    startDirectWorker(sessionId);
+  }
+
   const event = publishSessionEvent(sessionId, eventType, body, "outbound");
   console.log(`[RC-DEBUG] web -> server: published outbound event id=${event.id} type=${event.type} direction=${event.direction} subscribers=${getEventBus(sessionId).subscriberCount()}`);
   return c.json({ status: "ok", event }, 200);

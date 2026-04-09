@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  /* Core palette — warm terracotta */
+  --color-bg-primary: #FAF9F6;
+  --color-bg-card: #FFFFFF;
+  --color-bg-dark: #1A1612;
+  --color-bg-dark-hover: #2A2520;
+  --color-bg-dark-elevated: #332E28;
+  --color-bg-input: #F2EFEA;
+  --color-bg-input-focus: #FFFFFF;
+  --color-bg-user-msg: #D97757;
+  --color-bg-assistant-msg: #FFFFFF;
+  --color-bg-tool-card: #F5F3EF;
+  --color-bg-permission: #FFF9F0;
+  --color-text-primary: #1A1612;
+  --color-text-secondary: #6B6560;
+  --color-text-light: #FFFFFF;
+  --color-text-muted: #9B9590;
+  --color-text-inverse: #FAF9F6;
+  --color-border-default: #E8E4DF;
+  --color-border-light: #F0ECE7;
+  --color-border-focus: #D97757;
+  --color-accent: #D97757;
+  --color-accent-hover: #C4684A;
+  --color-accent-subtle: #FDF0EB;
+  --color-success: #3B8A6A;
+  --color-success-bg: #E8F5EE;
+  --color-warning: #C49A2C;
+  --color-warning-bg: #FFF8E8;
+  --color-orange: #D07A3A;
+  --color-orange-bg: #FFF3E8;
+  --color-danger: #C44040;
+  --color-danger-bg: #FDE8E8;
+  --color-info: #4A7FC4;
+  --color-info-bg: #E8F0FD;
+  --color-plan: #7C6FA0;
+  --color-plan-bg: rgba(124, 111, 160, 0.1);
+
+  /* Dark theme overrides */
+  --color-dark-bg-primary: #1A1612;
+  --color-dark-bg-card: #252119;
+  --color-dark-bg-input: #2A2520;
+  --color-dark-bg-tool-card: #2A2520;
+  --color-dark-text-primary: #FAF9F6;
+  --color-dark-text-secondary: #9B9590;
+  --color-dark-text-muted: #6B6560;
+  --color-dark-border-default: #3D3830;
+  --color-dark-border-light: #332E28;
+
+  --font-display: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+  --font-sans: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Fira Code", "SF Mono", Menlo, monospace;
+}
+
+/* Dark mode */
+.dark {
+  --color-bg-primary: var(--color-dark-bg-primary);
+  --color-bg-card: var(--color-dark-bg-card);
+  --color-bg-input: var(--color-dark-bg-input);
+  --color-bg-input-focus: var(--color-dark-bg-card);
+  --color-bg-assistant-msg: var(--color-dark-bg-card);
+  --color-bg-tool-card: var(--color-dark-bg-tool-card);
+  --color-bg-permission: #2A2520;
+  --color-text-primary: var(--color-dark-text-primary);
+  --color-text-secondary: var(--color-dark-text-secondary);
+  --color-text-muted: var(--color-dark-text-muted);
+  --color-border-default: var(--color-dark-border-default);
+  --color-border-light: var(--color-dark-border-light);
+  --color-accent-subtle: rgba(217, 119, 87, 0.15);
+}
+
+/* Base */
+body {
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+
+/* Selection */
+::selection {
+  background: rgba(217, 119, 87, 0.2);
+  color: var(--color-text-primary);
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes glimmer-sweep {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.3s ease-out; }
+
+.glimmer-text {
+  background: linear-gradient(90deg, var(--color-text-secondary) 0%, var(--color-text-secondary) 40%, var(--color-accent) 50%, var(--color-text-secondary) 60%, var(--color-text-secondary) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: glimmer-sweep 3s ease-in-out infinite;
+}

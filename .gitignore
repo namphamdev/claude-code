@@ -29,3 +29,5 @@ __pycache__/
 logs
 
 data
+/.omc
+/packages/remote-control-server/.omc
