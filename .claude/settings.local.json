@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "default_mode": "bypassPermissions",
     "allow": [
       "Bash(rtk bun:*)",
       "Bash(bun test:*)",

@@ -33,7 +33,7 @@ const envFeatures = Object.keys(process.env)
   .map(k => k.replace('FEATURE_', ''))
 const features = [...new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])]
 
-const outName = platform === 'win32' ? 'ccb.exe' : 'ccb'
+const outName = platform === 'win32' ? 'claude.exe' : 'claude'
 
 console.log(`Building executable: dist/${outName}`)
 console.log(`Platform: ${platform}/${arch}`)
