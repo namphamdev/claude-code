@@ -550,6 +550,71 @@ export function wrapFetchWithTimeout(baseFetch: FetchLike): FetchLike {
   }
 }
 
+/**
+ * Wraps a fetch function to apply a 10s timeout to the connection attempt.
+ * Once the fetch resolves (meaning the response headers have been received
+ * and the SSE stream is open), the timeout is cleared.
+ * This prevents indefinite hangs when the server accepts the connection but
+ * never sends headers. It also includes 3 retries automatically.
+ *
+ * @param baseFetch - The fetch function to wrap
+ */
+export function wrapFetchWithSseConnectionTimeout(
+  baseFetch: FetchLike,
+): FetchLike {
+  return async (url: string | URL, init?: RequestInit) => {
+    let attempts = 0
+    const maxAttempts = 3
+    while (true) {
+      attempts++
+      const controller = new AbortController()
+      const timer = setTimeout(
+        c =>
+          c.abort(
+            new DOMException(
+              'SSE connection stuck or timed out after 10s',
+              'TimeoutError',
+            ),
+          ),
+        10000,
+        controller,
+      )
+      timer.unref?.()
+
+      const parentSignal = init?.signal
+      const abort = () => controller.abort(parentSignal?.reason)
+      parentSignal?.addEventListener('abort', abort)
+      if (parentSignal?.aborted) {
+        controller.abort(parentSignal.reason)
+      }
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        parentSignal?.removeEventListener('abort', abort)
+      }
+
+      try {
+        const response = await baseFetch(url, {
+          ...init,
+          signal: controller.signal,
+        })
+        cleanup()
+        return response
+      } catch (error) {
+        cleanup()
+        if (
+          error instanceof DOMException &&
+          error.name === 'TimeoutError' &&
+          attempts < maxAttempts
+        ) {
+          continue
+        }
+        throw error
+      }
+    }
+  }
+}
+
 export function getMcpServerConnectionBatchSize(): number {
   return parseInt(process.env.MCP_SERVER_CONNECTION_BATCH_SIZE || '', 10) || 3
 }
@@ -647,28 +712,30 @@ export const connectToServer = memoize(
         // The timeout is only meant for individual API requests (POST, auth refresh), not
         // the persistent SSE stream.
         transportOptions.eventSourceInit = {
-          fetch: async (url: string | URL, init?: RequestInit) => {
-            // Get auth headers from the auth provider
-            const authHeaders: Record<string, string> = {}
-            const tokens = await authProvider.tokens()
-            if (tokens) {
-              authHeaders.Authorization = `Bearer ${tokens.access_token}`
-            }
+          fetch: wrapFetchWithSseConnectionTimeout(
+            async (url: string | URL, init?: RequestInit) => {
+              // Get auth headers from the auth provider
+              const authHeaders: Record<string, string> = {}
+              const tokens = await authProvider.tokens()
+              if (tokens) {
+                authHeaders.Authorization = `Bearer ${tokens.access_token}`
+              }
 
-            const proxyOptions = getProxyFetchOptions()
-            // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-            return fetch(url, {
-              ...init,
-              ...proxyOptions,
-              headers: {
-                'User-Agent': getMCPUserAgent(),
-                ...authHeaders,
-                ...init?.headers,
-                ...combinedHeaders,
-                Accept: 'text/event-stream',
-              },
-            })
-          },
+              const proxyOptions = getProxyFetchOptions()
+              // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+              return fetch(url, {
+                ...init,
+                ...proxyOptions,
+                headers: {
+                  'User-Agent': getMCPUserAgent(),
+                  ...authHeaders,
+                  ...init?.headers,
+                  ...combinedHeaders,
+                  Accept: 'text/event-stream',
+                },
+              })
+            },
+          ),
         }
 
         transport = new SSEClientTransport(
@@ -685,20 +752,37 @@ export const connectToServer = memoize(
           proxyOptions.dispatcher
             ? {
                 eventSourceInit: {
-                  fetch: async (url: string | URL, init?: RequestInit) => {
-                    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-                    return fetch(url, {
-                      ...init,
-                      ...proxyOptions,
-                      headers: {
-                        'User-Agent': getMCPUserAgent(),
-                        ...init?.headers,
-                      },
-                    })
-                  },
+                  fetch: wrapFetchWithSseConnectionTimeout(
+                    async (url: string | URL, init?: RequestInit) => {
+                      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+                      return fetch(url, {
+                        ...init,
+                        ...proxyOptions,
+                        headers: {
+                          'User-Agent': getMCPUserAgent(),
+                          ...init?.headers,
+                        },
+                      })
+                    },
+                  ),
                 },
               }
-            : {}
+            : {
+                eventSourceInit: {
+                  fetch: wrapFetchWithSseConnectionTimeout(
+                    async (url: string | URL, init?: RequestInit) => {
+                      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+                      return fetch(url, {
+                        ...init,
+                        headers: {
+                          'User-Agent': getMCPUserAgent(),
+                          ...init?.headers,
+                        },
+                      })
+                    },
+                  ),
+                },
+              }
 
         transport = new SSEClientTransport(
           new URL(serverRef.url),
