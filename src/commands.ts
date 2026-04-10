@@ -151,6 +151,7 @@ import chrome from './commands/chrome/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import provider from './commands/provider.js'
+import envCommand from './commands/env/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -259,6 +260,7 @@ const COMMANDS = memoize((): Command[] => [
   addDir,
   advisor,
   provider,
+  envCommand,
   agents,
   branch,
   btw,

@@ -333,6 +333,14 @@ export const SettingsSchema = lazySchema(() =>
       env: EnvironmentVariablesSchema()
         .optional()
         .describe('Environment variables to set for Claude Code sessions'),
+      envs: z
+        .record(z.string(), EnvironmentVariablesSchema())
+        .optional()
+        .describe('Named environment variable presets'),
+      activeEnv: z
+        .string()
+        .optional()
+        .describe('Name of the active environment preset from envs to apply'),
       // Attribution for commits and PRs
       attribution: z
         .object({

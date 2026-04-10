@@ -169,12 +169,32 @@ export function applySafeConfigEnvironmentVariables(): void {
   // unchanged (it has the highest merge priority in both loops) — except
   // provider-routing vars, which filterSettingsEnv strips from every source
   // when CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set.
-  const settingsEnv = filterSettingsEnv(getSettings_DEPRECATED()?.env)
+  const mergedSettings = getSettings_DEPRECATED()
+  const settingsEnv = filterSettingsEnv(mergedSettings?.env)
   for (const [key, value] of Object.entries(settingsEnv)) {
     if (SAFE_ENV_VARS.has(key.toUpperCase())) {
       process.env[key] = value
     }
   }
+  // Also apply safe vars from the active named env preset
+  const activePresetEnv = filterSettingsEnv(getActiveEnvPreset(mergedSettings))
+  for (const [key, value] of Object.entries(activePresetEnv)) {
+    if (SAFE_ENV_VARS.has(key.toUpperCase())) {
+      process.env[key] = value
+    }
+  }
+}
+
+/**
+ * Returns the env vars from the active named preset (settings.envs[settings.activeEnv]),
+ * or an empty object if no preset is selected or the name doesn't exist.
+ */
+function getActiveEnvPreset(
+  settings: ReturnType<typeof getSettings_DEPRECATED>,
+): Record<string, string> {
+  const activeEnv = settings?.activeEnv
+  if (!activeEnv || !settings?.envs) return {}
+  return settings.envs[activeEnv] ?? {}
 }
 
 /**
@@ -187,7 +207,9 @@ export function applySafeConfigEnvironmentVariables(): void {
 export function applyConfigEnvironmentVariables(): void {
   Object.assign(process.env, filterSettingsEnv(getGlobalConfig().env))
 
-  Object.assign(process.env, filterSettingsEnv(getSettings_DEPRECATED()?.env))
+  const settings = getSettings_DEPRECATED()
+  Object.assign(process.env, filterSettingsEnv(settings?.env))
+  Object.assign(process.env, filterSettingsEnv(getActiveEnvPreset(settings)))
 
   // Clear caches so agents are rebuilt with the new env vars
   clearCACertsCache()
