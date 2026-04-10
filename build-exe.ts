@@ -1,6 +1,6 @@
 import { getMacroDefines } from './scripts/defines.ts'
 import { resolve } from 'path'
-import { rename } from 'fs/promises'
+import { mkdir, rename, rm, stat } from 'fs/promises'
 
 // Detect platform/arch for native addon embedding
 const platform = process.platform // 'win32' | 'darwin' | 'linux'
@@ -33,44 +33,105 @@ const envFeatures = Object.keys(process.env)
   .map(k => k.replace('FEATURE_', ''))
 const features = [...new Set([...DEFAULT_BUILD_FEATURES, ...envFeatures])]
 
-const outName = platform === 'win32' ? 'claude.exe' : 'claude'
+const exeName = platform === 'win32' ? 'claude.exe' : 'claude'
+// Bun compile ignores `naming` — output is always based on entrypoint name.
+const compiledName = platform === 'win32' ? 'cli.exe' : 'cli'
 
-console.log(`Building executable: dist/${outName}`)
+const commonDefine = {
+  ...getMacroDefines(),
+  // Tell audio-capture loader to use the embedded path
+  'process.env.AUDIO_CAPTURE_NODE_PATH': JSON.stringify(
+    `../../audio-capture.node`,
+  ),
+}
+
+function formatSize(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  return `${mb.toFixed(1)} MB`
+}
+
+// --- Build 1: Full exe with embedded Bun runtime ---
+console.log(
+  `\n=== Building full executable (with runtime): dist/${exeName} ===`,
+)
 console.log(`Platform: ${platform}/${arch}`)
 console.log(`Features: ${features.join(', ')}`)
 console.log(`Native addon: ${addonPath}`)
 
-const result = await Bun.build({
+const result1 = await Bun.build({
   entrypoints: ['src/entrypoints/cli.tsx'],
   outdir: 'dist',
   target: 'bun',
   compile: true,
-  define: {
-    ...getMacroDefines(),
-    // Tell audio-capture loader to use the embedded path
-    'process.env.AUDIO_CAPTURE_NODE_PATH': JSON.stringify(
-      `../../audio-capture.node`,
-    ),
-  },
+  minify: true,
+  define: commonDefine,
   features,
-  naming: outName,
-  // Embed the native addon for the current platform
+  naming: exeName,
   embed: [addonPath],
 })
 
-if (!result.success) {
-  console.error('Build failed:')
-  for (const log of result.logs) {
+if (!result1.success) {
+  console.error('Build (full exe) failed:')
+  for (const log of result1.logs) {
     console.error(log)
   }
   process.exit(1)
 }
 
-// Bun compile ignores `naming` — output is always based on entrypoint name.
-// Rename cli.exe → ccb.exe (or cli → ccb on unix).
-const compiledName = platform === 'win32' ? 'cli.exe' : 'cli'
-if (compiledName !== outName) {
-  await rename(resolve('dist', compiledName), resolve('dist', outName))
+if (compiledName !== exeName) {
+  await rename(resolve('dist', compiledName), resolve('dist', exeName))
 }
 
-console.log(`\nExecutable built: dist/${outName}`)
+const fullSize = (await stat(resolve('dist', exeName))).size
+console.log(`Built: dist/${exeName} (${formatSize(fullSize)})`)
+
+// --- Build 2: Slim bundle (no embedded runtime, requires bun on PATH) ---
+const slimDir = resolve('dist', 'slim')
+await mkdir(slimDir, { recursive: true })
+
+console.log(`\n=== Building slim bundle (no runtime): dist/slim/cli.js ===`)
+
+const result2 = await Bun.build({
+  entrypoints: ['src/entrypoints/cli.tsx'],
+  outdir: slimDir,
+  target: 'bun',
+  minify: true,
+  define: commonDefine,
+  features,
+  naming: 'cli.js',
+})
+
+if (!result2.success) {
+  console.error('Build (slim bundle) failed:')
+  for (const log of result2.logs) {
+    console.error(log)
+  }
+  process.exit(1)
+}
+
+const bundleSize = (await stat(resolve(slimDir, 'cli.js'))).size
+console.log(`Built: dist/slim/cli.js (${formatSize(bundleSize)})`)
+
+// Create convenience launcher scripts
+const batContent = `@echo off\r\nbun "%~dp0cli.js" %*\r\n`
+const shContent = `#!/bin/sh\nexec bun "$(dirname "$0")/cli.js" "$@"\n`
+await Bun.write(resolve(slimDir, 'claude.cmd'), batContent)
+await Bun.write(resolve(slimDir, 'claude.sh'), shContent)
+
+// --- Summary ---
+console.log(`\n=== Build complete ===`)
+console.log(
+  `  dist/${exeName}              ${formatSize(fullSize)} (standalone, includes Bun runtime)`,
+)
+console.log(
+  `  dist/slim/cli.js             ${formatSize(bundleSize)} (app bundle, requires bun on PATH)`,
+)
+console.log(
+  `  dist/slim/claude.cmd         launcher for Windows (bun cli.js %*)`,
+)
+console.log(
+  `  dist/slim/claude.sh          launcher for Unix (bun cli.js "$@")`,
+)
+console.log(
+  `  Savings: ${formatSize(fullSize - bundleSize)} (${((1 - bundleSize / fullSize) * 100).toFixed(0)}% smaller without runtime)`,
+)
