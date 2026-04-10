@@ -186,12 +186,13 @@ export function ResumeTask({
     ...sessionMetadata.map(meta => meta.timeString.length),
   )
 
-  const options = sessionMetadata.map(({ timeString, title, id }) => {
+  const options = sessionMetadata.map(({ timeString, title, id, branch }) => {
     const paddedTime = timeString.padEnd(maxTimeStringLength, ' ')
 
-    // TODO: include branch name when API returns it
+    const label = branch ? `${paddedTime}  ${title} (${branch})` : `${paddedTime}  ${title}`
+
     return {
-      label: `${paddedTime}  ${title}`,
+      label,
       value: id,
     }
   })

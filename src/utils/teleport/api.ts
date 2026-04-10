@@ -168,6 +168,7 @@ export const CodeSessionSchema = lazySchema(() =>
     turns: z.array(z.string()),
     created_at: z.string(),
     updated_at: z.string(),
+    branch: z.string().optional(),
   }),
 )
 
@@ -257,6 +258,7 @@ export async function fetchCodeSessionsFromSessionsAPI(): Promise<
         turns: [], // SessionResource doesn't have turns field
         created_at: session.created_at,
         updated_at: session.updated_at,
+        branch: getBranchFromSession(session),
       }
     })
 
