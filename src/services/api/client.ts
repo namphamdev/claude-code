@@ -297,6 +297,33 @@ export async function getAnthropicClient({
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
 
+  // GitHub Copilot auth type — routes requests through the Copilot API proxy
+  if (process.env.ANTHROPIC_AUTH_TYPE === 'copilot') {
+    const copilotToken = process.env.ANTHROPIC_AUTH_TOKEN
+    const copilotBaseURL =
+      process.env.ANTHROPIC_BASE_URL || 'https://api.githubcopilot.com'
+
+    if (!copilotToken) {
+      throw new Error(
+        'ANTHROPIC_AUTH_TOKEN is required when ANTHROPIC_AUTH_TYPE=copilot',
+      )
+    }
+
+    return new Anthropic({
+      ...ARGS,
+      apiKey: null,
+      authToken: copilotToken,
+      baseURL: copilotBaseURL,
+      defaultHeaders: {
+        ...defaultHeaders,
+        'x-initiator': 'agent',
+        'Openai-Intent': 'conversation-edits',
+      },
+      fetch: buildCopilotFetch(resolvedFetch, copilotToken),
+      ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+    })
+  }
+
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey: isClaudeAISubscriber() ? null : apiKey || getAnthropicApiKey(),
@@ -385,5 +412,24 @@ function buildFetch(
       // never let logging crash the fetch
     }
     return inner(input, { ...init, headers })
+  }
+}
+
+/**
+ * Build a fetch wrapper for the GitHub Copilot API proxy.
+ * Strips x-api-key and lowercase authorization headers that the Anthropic SDK
+ * may set, then ensures the correct Copilot Authorization header is present.
+ */
+function buildCopilotFetch(
+  inner: ClientOptions['fetch'],
+  copilotToken: string,
+): ClientOptions['fetch'] {
+  return (input, init) => {
+    const headers = new Headers(init?.headers)
+    headers.delete('x-api-key')
+    // Headers.delete is case-insensitive — removes any existing Authorization
+    headers.delete('authorization')
+    headers.set('Authorization', `Bearer ${copilotToken}`)
+    return inner!(input, { ...init, headers })
   }
 }

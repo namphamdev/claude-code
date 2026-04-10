@@ -10,6 +10,7 @@ export type APIProvider =
   | 'openai'
   | 'gemini'
   | 'grok'
+  | 'copilot'
 
 export function getAPIProvider(): APIProvider {
   const modelType = getInitialSettings().modelType
@@ -24,6 +25,8 @@ export function getAPIProvider(): APIProvider {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI)) return 'openai'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI)) return 'gemini'
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_GROK)) return 'grok'
+
+  if (process.env.ANTHROPIC_AUTH_TYPE === 'copilot') return 'copilot'
 
   return 'firstParty'
 }
