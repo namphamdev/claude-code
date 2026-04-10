@@ -151,7 +151,6 @@ import chrome from './commands/chrome/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
 import provider from './commands/provider.js'
-import envCommand from './commands/env/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -171,7 +170,7 @@ import {
 import memoize from 'lodash-es/memoize.js'
 import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
 import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
-import env from './commands/env/index.js'
+import envCommand from './commands/env/index.js'
 import exit from './commands/exit/index.js'
 import exportCommand from './commands/export/index.js'
 import model from './commands/model/index.js'
@@ -247,7 +246,6 @@ export const INTERNAL_ONLY_COMMANDS = [
   teleport,
   antTrace,
   perfIssue,
-  env,
   oauthRefresh,
   debugToolCall,
   agentsPlatform,
