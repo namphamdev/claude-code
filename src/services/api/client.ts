@@ -229,14 +229,6 @@ export async function getAnthropicClient({
       import('@anthropic-ai/vertex-sdk'),
       import('google-auth-library'),
     ])
-    // TODO: Cache either GoogleAuth instance or AuthClient to improve performance
-    // Currently we create a new GoogleAuth instance for every getAnthropicClient() call
-    // This could cause repeated authentication flows and metadata server checks
-    // However, caching needs careful handling of:
-    // - Credential refresh/expiration
-    // - Environment variable changes (GOOGLE_APPLICATION_CREDENTIALS, project vars)
-    // - Cross-request auth state management
-    // See: https://github.com/googleapis/google-auth-library-nodejs/issues/390 for caching challenges
 
     // Prevent metadata server timeout by providing projectId as fallback
     // google-auth-library checks project ID in this order:
@@ -263,14 +255,36 @@ export async function getAnthropicClient({
       process.env['GOOGLE_APPLICATION_CREDENTIALS'] ||
       process.env['google_application_credentials']
 
-    const googleAuth = isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)
-      ? ({
-          // Mock GoogleAuth for testing/proxy scenarios
-          getClient: () => ({
-            getRequestHeaders: () => ({}),
-          }),
-        } as unknown as GoogleAuth)
-      : new GoogleAuth({
+    let googleAuth: InstanceType<typeof GoogleAuth>
+
+    if (isEnvTruthy(process.env.CLAUDE_CODE_SKIP_VERTEX_AUTH)) {
+      googleAuth = {
+        // Mock GoogleAuth for testing/proxy scenarios
+        getClient: () => ({
+          getRequestHeaders: () => ({}),
+        }),
+      } as unknown as InstanceType<typeof GoogleAuth>
+    } else {
+      // Caching GoogleAuth instances by project parameters to improve performance
+      // and prevent repeated authentication flows and metadata server checks
+      const googleAuthOptionsKey = JSON.stringify({
+        hasProjectEnvVar,
+        hasKeyFile,
+        projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
+      })
+
+      const globalState = globalThis as typeof globalThis & {
+        __googleAuthCache?: Map<string, InstanceType<typeof GoogleAuth>>
+      }
+
+      if (!globalState.__googleAuthCache) {
+        globalState.__googleAuthCache = new Map()
+      }
+
+      if (globalState.__googleAuthCache.has(googleAuthOptionsKey)) {
+        googleAuth = globalState.__googleAuthCache.get(googleAuthOptionsKey)!
+      } else {
+        googleAuth = new GoogleAuth({
           scopes: ['https://www.googleapis.com/auth/cloud-platform'],
           // Only use ANTHROPIC_VERTEX_PROJECT_ID as last resort fallback
           // This prevents the 12-second metadata server timeout when:
@@ -286,6 +300,9 @@ export async function getAnthropicClient({
                 projectId: process.env.ANTHROPIC_VERTEX_PROJECT_ID,
               }),
         })
+        globalState.__googleAuthCache.set(googleAuthOptionsKey, googleAuth)
+      }
+    }
 
     const vertexArgs: ConstructorParameters<typeof AnthropicVertex>[0] = {
       ...ARGS,
