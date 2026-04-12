@@ -1,12 +1,70 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+
+type MessageType = "user" | "agent" | "thinking";
+
+interface Message {
+  id: string;
+  type: MessageType;
+  content: string;
+}
 
 export function Workspace() {
   const [inputText, setInputText] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "1",
+      type: "agent",
+      content: 'I\'ve analyzed the <span class="text-primary font-mono text-xs">ManuscriptEditor</span> component. It needs a more robust state management for the editorial workflow. Should I refactor it to use the new Context API?',
+    },
+    {
+      id: "2",
+      type: "user",
+      content: 'Yes, please refactor it. Also, ensure the typography follows our "The Intellectual Editorial" design system tokens.',
+    }
+  ]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const handleSpawnClaude = () => {
-    console.log("Spawning Claude with message:", inputText);
-    // Placeholder API call to "spawn and run the claude code"
+    if (!inputText.trim()) return;
+
+    const newUserMessage: Message = {
+      id: Date.now().toString(),
+      type: "user",
+      content: inputText,
+    };
+
+    const thinkingMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      type: "thinking",
+      content: "Agent is rewriting the module...",
+    };
+
+    setMessages((prev) => [...prev, newUserMessage, thinkingMessage]);
     setInputText("");
+
+    // Mock API Call
+    setTimeout(() => {
+      setMessages((prev) => {
+        const newMessages = prev.filter(msg => msg.type !== "thinking");
+        return [
+          ...newMessages,
+          {
+            id: Date.now().toString(),
+            type: "agent",
+            content: "I have updated the ManuscriptEditor component according to your specifications. It now uses the Context API and adheres to our typography design tokens.",
+          }
+        ];
+      });
+    }, 2000);
   };
 
   return (
@@ -24,41 +82,52 @@ export function Workspace() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-32">
-          {/* Agent Message */}
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-white text-sm">robot_2</span>
-            </div>
-            <div className="space-y-2">
-              <div className="bg-surface-container-lowest p-4 rounded-xl rounded-tl-none shadow-sm text-sm leading-relaxed text-on-surface-variant">
-                I've analyzed the <span className="text-primary font-mono text-xs">ManuscriptEditor</span> component. It needs a more robust state management for the editorial workflow. Should I refactor it to use the new Context API?
-              </div>
-              <div className="flex gap-2">
-                <button className="text-[10px] font-label px-3 py-1 bg-surface-container-highest rounded-full hover:bg-outline-variant/20 transition-colors">Show Plan</button>
-                <button className="text-[10px] font-label px-3 py-1 bg-surface-container-highest rounded-full hover:bg-outline-variant/20 transition-colors">Ignore</button>
-              </div>
-            </div>
-          </div>
+          {messages.map((msg) => (
+            <div key={msg.id}>
+              {msg.type === "agent" && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-white text-sm">robot_2</span>
+                  </div>
+                  <div className="space-y-2">
+                    <div
+                      className="bg-surface-container-lowest p-4 rounded-xl rounded-tl-none shadow-sm text-sm leading-relaxed text-on-surface-variant"
+                      dangerouslySetInnerHTML={{ __html: msg.content }}
+                    />
+                    {msg.id === "1" && (
+                      <div className="flex gap-2">
+                        <button className="text-[10px] font-label px-3 py-1 bg-surface-container-highest rounded-full hover:bg-outline-variant/20 transition-colors">Show Plan</button>
+                        <button className="text-[10px] font-label px-3 py-1 bg-surface-container-highest rounded-full hover:bg-outline-variant/20 transition-colors">Ignore</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-          {/* User Message */}
-          <div className="flex gap-3 flex-row-reverse">
-            <div className="w-8 h-8 rounded-full bg-tertiary flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-white text-sm">person</span>
-            </div>
-            <div className="bg-primary-container p-4 rounded-xl rounded-tr-none shadow-sm text-sm leading-relaxed text-on-primary-container">
-              Yes, please refactor it. Also, ensure the typography follows our "The Intellectual Editorial" design system tokens.
-            </div>
-          </div>
+              {msg.type === "user" && (
+                <div className="flex gap-3 flex-row-reverse">
+                  <div className="w-8 h-8 rounded-full bg-tertiary flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-white text-sm">person</span>
+                  </div>
+                  <div className="bg-primary-container p-4 rounded-xl rounded-tr-none shadow-sm text-sm leading-relaxed text-on-primary-container">
+                    {msg.content}
+                  </div>
+                </div>
+              )}
 
-          {/* Agent Thinking */}
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
-              <span className="material-symbols-outlined text-white text-sm">robot_2</span>
+              {msg.type === "thinking" && (
+                <div className="flex gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-white text-sm">robot_2</span>
+                  </div>
+                  <div className="italic text-xs text-outline font-label pt-2">
+                    {msg.content}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="italic text-xs text-outline font-label pt-2">
-              Agent is rewriting the module...
-            </div>
-          </div>
+          ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Interaction Box */}
