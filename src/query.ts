@@ -270,8 +270,16 @@ async function* queryLoop(
   // Mutable cross-iteration state. The loop body destructures this at the top
   // of each iteration so reads stay bare-name (`messages`, `toolUseContext`).
   // Continue sites write `state = { ... }` instead of 9 separate assignments.
+  //
+  // Clone params.messages to prevent shared-reference mutation. QueryEngine's
+  // submitMessage pushes yielded messages to its own `messages` array which is
+  // the same reference as params.messages. Without the clone, those pushes
+  // also mutate messagesForQuery inside the loop, and the subsequent
+  // messagesForQuery.concat(assistantMessages, toolResults) duplicates every
+  // assistant and tool_result message — causing a 400 from the API on the
+  // recursive call ("tool_use ids without tool_result blocks").
   let state: State = {
-    messages: params.messages,
+    messages: [...params.messages],
     toolUseContext: params.toolUseContext,
     maxOutputTokensOverride: params.maxOutputTokensOverride,
     autoCompactTracking: undefined,

@@ -89,7 +89,7 @@ console.log(`Built: dist/${exeName} (${formatSize(fullSize)})`)
 const slimDir = resolve('dist', 'slim')
 await mkdir(slimDir, { recursive: true })
 
-console.log(`\n=== Building slim bundle (no runtime): dist/slim/cli.js ===`)
+console.log(`\n=== Building slim bundle (no runtime): dist/slim/claude.js ===`)
 
 const result2 = await Bun.build({
   entrypoints: ['src/entrypoints/cli.tsx'],
@@ -98,7 +98,7 @@ const result2 = await Bun.build({
   minify: true,
   define: commonDefine,
   features,
-  naming: 'cli.js',
+  naming: 'claude.js',
 })
 
 if (!result2.success) {
@@ -109,12 +109,12 @@ if (!result2.success) {
   process.exit(1)
 }
 
-const bundleSize = (await stat(resolve(slimDir, 'cli.js'))).size
-console.log(`Built: dist/slim/cli.js (${formatSize(bundleSize)})`)
+const bundleSize = (await stat(resolve(slimDir, 'claude.js'))).size
+console.log(`Built: dist/slim/claude.js (${formatSize(bundleSize)})`)
 
 // Create convenience launcher scripts
-const batContent = `@echo off\r\nbun "%~dp0cli.js" %*\r\n`
-const shContent = `#!/bin/sh\nexec bun "$(dirname "$0")/cli.js" "$@"\n`
+const batContent = `@echo off\r\nbun "%~dp0claude.js" %*\r\n`
+const shContent = `#!/bin/sh\nexec bun "$(dirname "$0")/claude.js" "$@"\n`
 await Bun.write(resolve(slimDir, 'claude.cmd'), batContent)
 await Bun.write(resolve(slimDir, 'claude.sh'), shContent)
 
@@ -124,13 +124,13 @@ console.log(
   `  dist/${exeName}              ${formatSize(fullSize)} (standalone, includes Bun runtime)`,
 )
 console.log(
-  `  dist/slim/cli.js             ${formatSize(bundleSize)} (app bundle, requires bun on PATH)`,
+  `  dist/slim/claude.js             ${formatSize(bundleSize)} (app bundle, requires bun on PATH)`,
 )
 console.log(
-  `  dist/slim/claude.cmd         launcher for Windows (bun cli.js %*)`,
+  `  dist/slim/claude.cmd         launcher for Windows (bun claude.js %*)`,
 )
 console.log(
-  `  dist/slim/claude.sh          launcher for Unix (bun cli.js "$@")`,
+  `  dist/slim/claude.sh          launcher for Unix (bun claude.js "$@")`,
 )
 console.log(
   `  Savings: ${formatSize(fullSize - bundleSize)} (${((1 - bundleSize / fullSize) * 100).toFixed(0)}% smaller without runtime)`,

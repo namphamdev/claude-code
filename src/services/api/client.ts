@@ -316,7 +316,7 @@ export async function getAnthropicClient({
       baseURL: copilotBaseURL,
       defaultHeaders: {
         ...defaultHeaders,
-        'x-initiator': 'agent',
+        'x-initiator': 'user',
         'Openai-Intent': 'conversation-edits',
       },
       fetch: buildCopilotFetch(resolvedFetch, copilotToken),
@@ -424,12 +424,46 @@ function buildCopilotFetch(
   inner: ClientOptions['fetch'],
   copilotToken: string,
 ): ClientOptions['fetch'] {
-  return (input, init) => {
+  return async (input, init) => {
     const headers = new Headers(init?.headers)
     headers.delete('x-api-key')
     // Headers.delete is case-insensitive — removes any existing Authorization
     headers.delete('authorization')
     headers.set('Authorization', `Bearer ${copilotToken}`)
+
+    // Determine x-initiator based on message content:
+    // - If first message contains "[free]", use "agent"
+    // - Otherwise: "user" if only 1 message, "agent" if more than 1
+    try {
+      const bodyText =
+        typeof init?.body === 'string'
+          ? init.body
+          : init?.body instanceof Uint8Array
+            ? new TextDecoder().decode(init.body)
+            : null
+      if (bodyText) {
+        const parsed = JSON.parse(bodyText)
+        const messages: { role: string; content: unknown }[] =
+          parsed?.messages ?? []
+        const firstContent = messages[0]?.content
+        const firstText =
+          typeof firstContent === 'string'
+            ? firstContent
+            : Array.isArray(firstContent)
+              ? firstContent
+                  .map((b: { type: string; text?: string }) =>
+                    b.type === 'text' ? (b.text ?? '') : '',
+                  )
+                  .join('')
+              : ''
+        const isPaid = firstText.includes('[paid]')
+        const initiator = !isPaid || messages.length > 1 ? 'agent' : 'user'
+        headers.set('x-initiator', initiator)
+      }
+    } catch {
+      // leave existing x-initiator from defaultHeaders unchanged
+    }
+
     return inner!(input, { ...init, headers })
   }
 }
