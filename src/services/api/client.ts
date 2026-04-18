@@ -1,5 +1,8 @@
 import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
+import { existsSync, mkdirSync, appendFileSync } from 'fs'
+import { join } from 'path'
+import { homedir } from 'os'
 import type { GoogleAuth } from 'google-auth-library'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
@@ -22,6 +25,7 @@ import {
   getSessionId,
 } from '../../bootstrap/state.js'
 import { getOauthConfig } from '../../constants/oauth.js'
+import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
 import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
 import {
   getAWSRegion,
@@ -298,14 +302,28 @@ export async function getAnthropicClient({
   }
 
   // GitHub Copilot auth type — routes requests through the Copilot API proxy
-  if (process.env.ANTHROPIC_AUTH_TYPE === 'copilot') {
-    const copilotToken = process.env.ANTHROPIC_AUTH_TOKEN
-    const copilotBaseURL =
-      process.env.ANTHROPIC_BASE_URL || 'https://api.githubcopilot.com'
+  // Detect copilot mode from either:
+  // 1. Explicit ANTHROPIC_AUTH_TYPE=copilot (from active env, settings, or process.env)
+  // 2. Base URL matching api.githubcopilot.com (allows activeEnv presets to work)
+  const effectiveBaseUrl = getEffectiveBaseUrl()
+  const effectiveAuthType = getEffectiveAuthType()
+  logForDebugging(`[API:auth] effectiveBaseUrl: ${effectiveBaseUrl}`)
+  logForDebugging(
+    `[API:auth] effectiveAuthType: ${effectiveAuthType || 'undefined'}`,
+  )
+  const isCopilotMode =
+    effectiveAuthType === 'copilot' ||
+    effectiveBaseUrl.includes('api.githubcopilot.com')
+  logForDebugging(`[API:auth] isCopilotMode: ${isCopilotMode}`)
+
+  if (isCopilotMode) {
+    const copilotToken =
+      process.env.ANTHROPIC_AUTH_TOKEN || getEffectiveAuthToken()
+    const copilotBaseURL = effectiveBaseUrl
 
     if (!copilotToken) {
       throw new Error(
-        'ANTHROPIC_AUTH_TOKEN is required when ANTHROPIC_AUTH_TYPE=copilot',
+        'ANTHROPIC_AUTH_TOKEN is required for GitHub Copilot mode (detected from ANTHROPIC_AUTH_TYPE=copilot or base URL)',
       )
     }
 
@@ -325,19 +343,43 @@ export async function getAnthropicClient({
   }
 
   // Determine authentication method based on available tokens
+  // Priority: OAuth token > effective auth token from settings > API key
+  const effectiveAuthToken = getEffectiveAuthToken()
+  logForDebugging(
+    `[API:auth] effectiveAuthToken: ${effectiveAuthToken?.slice(0, 10)}... (exists: ${!!effectiveAuthToken})`,
+  )
+  logForDebugging(`[API:auth] isClaudeAISubscriber: ${isClaudeAISubscriber()}`)
+  logForDebugging(
+    `[API:auth] ANTHROPIC_API_KEY env: ${process.env.ANTHROPIC_API_KEY?.slice(0, 10) || 'not set'}...`,
+  )
+  const fallbackApiKey = getAnthropicApiKey()
+  logForDebugging(
+    `[API:auth] fallbackApiKey: ${fallbackApiKey?.slice(0, 10) || 'none'}...`,
+  )
+
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
-    apiKey: isClaudeAISubscriber() ? null : apiKey || getAnthropicApiKey(),
+    apiKey:
+      isClaudeAISubscriber() || effectiveAuthToken
+        ? null
+        : apiKey || getAnthropicApiKey(),
     authToken: isClaudeAISubscriber()
       ? getClaudeAIOAuthTokens()?.accessToken
-      : undefined,
-    // Set baseURL from OAuth config when using staging OAuth
+      : effectiveAuthToken,
+    // Set baseURL from OAuth config when using staging OAuth, or from settings
     ...(process.env.USER_TYPE === 'ant' &&
     isEnvTruthy(process.env.USE_STAGING_OAUTH)
       ? { baseURL: getOauthConfig().BASE_API_URL }
-      : {}),
+      : { baseURL: getEffectiveBaseUrl() }),
     ...ARGS,
     ...(isDebugToStdErr() && { logger: createStderrLogger() }),
   }
+
+  logForDebugging(
+    `[API:auth] Final config - apiKey: ${clientConfig.apiKey?.slice(0, 10) || 'null'}..., authToken: ${clientConfig.authToken?.slice(0, 10) || 'null'}...`,
+  )
+  logForDebugging(
+    `[API:auth] defaultHeaders.Authorization: ${defaultHeaders['authorization']?.slice(0, 20) || 'not set'}...`,
+  )
 
   return new Anthropic(clientConfig)
 }
@@ -347,10 +389,16 @@ async function configureApiKeyHeaders(
   isNonInteractiveSession: boolean,
 ): Promise<void> {
   const token =
-    process.env.ANTHROPIC_AUTH_TOKEN ||
+    getEffectiveAuthToken() ||
     (await getApiKeyFromApiKeyHelper(isNonInteractiveSession))
+  logForDebugging(
+    `[API:configureApiKeyHeaders] token: ${token?.slice(0, 10)}... (exists: ${!!token})`,
+  )
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
+    logForDebugging(
+      `[API:configureApiKeyHeaders] Set Authorization header to: ${headers['authorization']?.slice(0, 20)}...`,
+    )
   }
 }
 
@@ -380,7 +428,380 @@ function getCustomHeaders(): Record<string, string> {
   return customHeaders
 }
 
+/**
+ * Get effective auth type from settings (active env preset or top-level env)
+ * Reads directly from settings to handle active env preset even when
+ * CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set (which filters process.env)
+ */
+function getEffectiveAuthType(): string | undefined {
+  // Read directly from settings - handles active env preset
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
+      const activePreset = settings.envs[settings.activeEnv]
+      if (
+        activePreset?.ANTHROPIC_AUTH_TYPE !== undefined &&
+        activePreset?.ANTHROPIC_AUTH_TYPE !== ''
+      ) {
+        return activePreset.ANTHROPIC_AUTH_TYPE
+      }
+    }
+    // Also check top-level env
+    if (settings?.env?.ANTHROPIC_AUTH_TYPE) {
+      return settings.env.ANTHROPIC_AUTH_TYPE
+    }
+  } catch {
+    // Silently fall through
+  }
+
+  // Check process.env (set by host app or applyConfigEnvironmentVariables)
+  if (process.env.ANTHROPIC_AUTH_TYPE) {
+    return process.env.ANTHROPIC_AUTH_TYPE
+  }
+
+  return undefined
+}
+
+/**
+ * Get effective auth token from settings (active env preset or top-level env)
+ * Reads directly from settings to handle active env preset even when
+ * CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set (which filters process.env)
+ *
+ * Special case: if activeEnv is "oauth", returns undefined to allow OAuth auth
+ */
+function getEffectiveAuthToken(): string | undefined {
+  // Special case: "oauth" preset means use OAuth authentication
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+      return undefined // Let OAuth take over
+    }
+  } catch {
+    // Silently continue
+  }
+
+  // Check process.env first (set by applyConfigEnvironmentVariables)
+  if (process.env.ANTHROPIC_AUTH_TOKEN) {
+    return process.env.ANTHROPIC_AUTH_TOKEN
+  }
+
+  // Read directly from settings - handles active env preset
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
+      const activePreset = settings.envs[settings.activeEnv]
+      if (activePreset?.ANTHROPIC_AUTH_TOKEN) {
+        return activePreset.ANTHROPIC_AUTH_TOKEN
+      }
+    }
+    // Also check top-level env
+    if (settings?.env?.ANTHROPIC_AUTH_TOKEN) {
+      return settings.env.ANTHROPIC_AUTH_TOKEN
+    }
+  } catch {
+    // Silently fall through
+  }
+
+  return undefined
+}
+
+/**
+ * Get the effective base URL for API requests
+ * Reads directly from settings to handle active env preset even when
+ * CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set (which filters process.env)
+ *
+ * Priority order:
+ * 1. Copilot mode
+ * 2. Special "oauth" preset -> use OAuth default URL
+ * 3. Settings (active env preset or top-level env)
+ * 4. process.env (from host app or applyConfigEnvironmentVariables)
+ * 5. Staging OAuth
+ * 6. Default production
+ */
+function getEffectiveBaseUrl(): string {
+  // Copilot mode
+  if (getEffectiveAuthType() === 'copilot') {
+    return process.env.ANTHROPIC_BASE_URL || 'https://api.githubcopilot.com'
+  }
+
+  // Special case: "oauth" preset uses default OAuth URL
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+      return getOauthConfig().BASE_API_URL
+    }
+  } catch {
+    // Silently continue
+  }
+
+  // Read directly from settings - handles active env preset
+  // This bypasses the filterSettingsEnv() which strips ANTHROPIC_BASE_URL
+  // when CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
+      const activePreset = settings.envs[settings.activeEnv]
+      if (activePreset?.ANTHROPIC_BASE_URL) {
+        return activePreset.ANTHROPIC_BASE_URL.replace(/\/$/, '')
+      }
+    }
+    // Also check top-level env
+    if (settings?.env?.ANTHROPIC_BASE_URL) {
+      return settings.env.ANTHROPIC_BASE_URL.replace(/\/$/, '')
+    }
+  } catch {
+    // Silently fall through to next option
+  }
+
+  // Check process.env (set by host app or applyConfigEnvironmentVariables)
+  if (process.env.ANTHROPIC_BASE_URL) {
+    return process.env.ANTHROPIC_BASE_URL.replace(/\/$/, '')
+  }
+
+  // Staging OAuth
+  if (
+    process.env.USER_TYPE === 'ant' &&
+    isEnvTruthy(process.env.USE_STAGING_OAUTH)
+  ) {
+    return getOauthConfig().BASE_API_URL
+  }
+
+  // Default production
+  return getOauthConfig().BASE_API_URL
+}
+
+/**
+ * Get source description for base URL (for logging)
+ */
+function getBaseUrlSource(): string {
+  // Copilot mode
+  if (getEffectiveAuthType() === 'copilot') {
+    return 'copilot'
+  }
+
+  // Special case: "oauth" preset
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+      return 'oauth'
+    }
+  } catch {
+    // Silently continue
+  }
+
+  // Read from settings (matches getEffectiveBaseUrl priority)
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (
+      settings?.activeEnv &&
+      settings?.envs?.[settings.activeEnv]?.ANTHROPIC_BASE_URL
+    ) {
+      return `activeEnv[${settings.activeEnv}]`
+    }
+    if (settings?.env?.ANTHROPIC_BASE_URL) {
+      return 'settings.env'
+    }
+  } catch {
+    // Silently fall through
+  }
+
+  // Check process.env
+  if (process.env.ANTHROPIC_BASE_URL) {
+    return 'process.env'
+  }
+
+  // Default
+  return 'default'
+}
+
+/**
+ * Get source description for auth token (for logging)
+ * Priority: "oauth" preset > settings token > OAuth subscriber > process.env > API key
+ */
+function getAuthTokenSource(): string {
+  // Special case: "oauth" preset
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+      return 'oauth (preset)'
+    }
+  } catch {
+    // Silently continue
+  }
+
+  // Read from settings (matches getEffectiveAuthToken priority)
+  try {
+    const settings = getSettings_DEPRECATED()
+    if (
+      settings?.activeEnv &&
+      settings?.envs?.[settings.activeEnv]?.ANTHROPIC_AUTH_TOKEN
+    ) {
+      return `activeEnv[${settings.activeEnv}]`
+    }
+    if (settings?.env?.ANTHROPIC_AUTH_TOKEN) {
+      return 'settings.env'
+    }
+  } catch {
+    // Silently fall through
+  }
+
+  // OAuth subscriber (only if no settings auth token)
+  if (isClaudeAISubscriber()) {
+    return 'oauth (subscriber)'
+  }
+
+  // Check process.env
+  if (process.env.ANTHROPIC_AUTH_TOKEN) {
+    return 'process.env'
+  }
+
+  // API key
+  if (process.env.ANTHROPIC_API_KEY || getAnthropicApiKey()) {
+    return 'api_key'
+  }
+
+  return 'none'
+}
+
+/**
+ * Log the request details to the request log file
+ */
+function logBaseUrlToFile(input?: RequestInfo | URL, init?: RequestInit): void {
+  try {
+    const logDir = join(homedir(), '.claude', 'sdk-logs')
+    const logFile = join(logDir, 'request.log')
+
+    // Ensure directory exists
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true })
+    }
+
+    const baseUrl = getEffectiveBaseUrl()
+    const baseUrlSource = getBaseUrlSource()
+    const authTokenSource = getAuthTokenSource()
+    const timestamp = new Date().toISOString()
+
+    let requestUrl = ''
+
+    if (input) {
+      try {
+        requestUrl =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.href
+              : String(input)
+      } catch {
+        requestUrl = String(input)
+      }
+    }
+
+    let requestHeaders = ''
+    if (init?.headers) {
+      try {
+        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+        const headers = new Headers(init.headers)
+        const headerObj: Record<string, string> = {}
+        headers.forEach((value, key) => {
+          // Mask sensitive headers
+          if (
+            key.toLowerCase() === 'authorization' ||
+            key.toLowerCase() === 'x-api-key'
+          ) {
+            headerObj[key] = value.slice(0, 10) + '...(masked)'
+          } else {
+            headerObj[key] = value
+          }
+        })
+        requestHeaders = JSON.stringify(headerObj, null, 2)
+      } catch {
+        requestHeaders = '(unable to parse headers)'
+      }
+    }
+
+    const logLines = [
+      `[${timestamp}] BASE_URL: ${baseUrl} (source: ${baseUrlSource}) AUTH: ${authTokenSource}`,
+      `  URL: ${requestUrl}`,
+    ]
+    if (requestHeaders) {
+      logLines.push(
+        `  Headers:\n${requestHeaders
+          .split('\n')
+          .map(l => '    ' + l)
+          .join('\n')}`,
+      )
+    }
+    let requestBody = ''
+    if (init?.body) {
+      try {
+        const bodyText =
+          typeof init.body === 'string'
+            ? init.body
+            : init.body instanceof Uint8Array
+              ? new TextDecoder().decode(init.body)
+              : JSON.stringify(init.body)
+        // Try to parse and pretty-print JSON, otherwise raw text
+        try {
+          const parsed = JSON.parse(bodyText)
+          requestBody = JSON.stringify(parsed, null, 2)
+        } catch {
+          requestBody = bodyText
+        }
+      } catch {
+        requestBody = '(unable to parse body)'
+      }
+    }
+    logLines.push(`Body: ${requestBody}`)
+    logLines.push('') // Empty line for readability
+
+    appendFileSync(logFile, logLines.join('\n') + '\n', 'utf-8')
+  } catch {
+    // Silently fail - logging should never break the app
+  }
+}
+
 export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
+
+/**
+ * Get the mapped model name based on activeEnv settings
+ * Maps generic model tiers (opus/sonnet/haiku) to specific models configured in the active env preset
+ */
+function getMappedModel(model: string): string {
+  try {
+    const settings = getSettings_DEPRECATED()
+    const activeEnvName = settings?.activeEnv
+    if (!activeEnvName || !settings?.envs?.[activeEnvName]) {
+      return model
+    }
+
+    const activePreset = settings.envs[activeEnvName]
+    const modelLower = model.toLowerCase()
+
+    // Map model tiers to their configured values in activeEnv
+    if (
+      modelLower.includes('opus') &&
+      activePreset.ANTHROPIC_DEFAULT_OPUS_MODEL
+    ) {
+      return activePreset.ANTHROPIC_DEFAULT_OPUS_MODEL
+    }
+    if (
+      modelLower.includes('sonnet') &&
+      activePreset.ANTHROPIC_DEFAULT_SONNET_MODEL
+    ) {
+      return activePreset.ANTHROPIC_DEFAULT_SONNET_MODEL
+    }
+    if (
+      modelLower.includes('haiku') &&
+      activePreset.ANTHROPIC_DEFAULT_HAIKU_MODEL
+    ) {
+      return activePreset.ANTHROPIC_DEFAULT_HAIKU_MODEL
+    }
+
+    return model
+  } catch {
+    return model
+  }
+}
 
 function buildFetch(
   fetchOverride: ClientOptions['fetch'],
@@ -395,12 +816,58 @@ function buildFetch(
   return (input, init) => {
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const headers = new Headers(init?.headers)
+
+    // Fix authentication: Remove x-api-key header and ensure correct Authorization header
+    // The SDK might be setting x-api-key from a cached API key, so we override it here
+    // with the correct token from active env settings
+    const effectiveAuthToken = getEffectiveAuthToken()
+    if (effectiveAuthToken) {
+      // Remove any x-api-key header that might have been set by the SDK
+      headers.delete('x-api-key')
+      // Ensure Authorization header uses the correct token from settings
+      headers.set('Authorization', `Bearer ${effectiveAuthToken}`)
+      logForDebugging(
+        `[buildFetch] Set Authorization header with activeEnv token: ${effectiveAuthToken.slice(0, 10)}...`,
+      )
+    }
+
     // Generate a client-side request ID so timeouts (which return no server
     // request ID) can still be correlated with server logs by the API team.
     // Callers that want to track the ID themselves can pre-set the header.
     if (injectClientRequestId && !headers.has(CLIENT_REQUEST_ID_HEADER)) {
       headers.set(CLIENT_REQUEST_ID_HEADER, randomUUID())
     }
+
+    // Map model based on activeEnv settings
+    let modifiedInit = init
+    try {
+      const bodyText =
+        typeof init?.body === 'string'
+          ? init.body
+          : init?.body instanceof Uint8Array
+            ? new TextDecoder().decode(init.body)
+            : null
+      if (bodyText) {
+        const parsed = JSON.parse(bodyText)
+        if (parsed?.model) {
+          const originalModel = parsed.model
+          const mappedModel = getMappedModel(originalModel)
+          if (mappedModel !== originalModel) {
+            parsed.model = mappedModel
+            logForDebugging(
+              `[API REQUEST] Model mapped: ${originalModel} -> ${mappedModel}`,
+            )
+            modifiedInit = {
+              ...init,
+              body: JSON.stringify(parsed),
+            }
+          }
+        }
+      }
+    } catch {
+      // If body parsing fails, continue with original body
+    }
+
     try {
       // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
       const url = input instanceof Request ? input.url : String(input)
@@ -411,7 +878,64 @@ function buildFetch(
     } catch {
       // never let logging crash the fetch
     }
-    return inner(input, { ...init, headers })
+    // Log base URL to file for each request
+    // logBaseUrlToFile(input, { ...modifiedInit, headers })
+
+    // Wrap inner fetch to catch and log errors
+    return inner(input, { ...modifiedInit, headers }).catch(error => {
+      logErrorToFile(input, error)
+      throw error // Re-throw to maintain error propagation
+    })
+  }
+}
+
+/**
+ * Log fetch errors to the request log file
+ */
+function logErrorToFile(input?: RequestInfo | URL, error?: unknown): void {
+  try {
+    const logDir = join(homedir(), '.claude', 'sdk-logs')
+    const logFile = join(logDir, 'request.log')
+
+    // Ensure directory exists
+    if (!existsSync(logDir)) {
+      mkdirSync(logDir, { recursive: true })
+    }
+
+    const timestamp = new Date().toISOString()
+
+    let requestUrl = ''
+    if (input) {
+      try {
+        requestUrl =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.href
+              : String(input)
+      } catch {
+        requestUrl = String(input)
+      }
+    }
+
+    const errorMessage =
+      error instanceof Error ? error.message : String(error ?? 'Unknown error')
+    const errorStack = error instanceof Error ? error.stack : ''
+
+    const logLines = [
+      `[${timestamp}] ERROR: ${errorMessage}`,
+      `  URL: ${requestUrl}`,
+    ]
+    if (errorStack) {
+      // Only include first few lines of stack to keep log readable
+      const stackLines = errorStack.split('\n').slice(0, 3)
+      logLines.push(`  Stack:\n${stackLines.map(l => '    ' + l).join('\n')}`)
+    }
+    logLines.push('') // Empty line for readability
+
+    appendFileSync(logFile, logLines.join('\n') + '\n', 'utf-8')
+  } catch {
+    // Silently fail - logging should never break the app
   }
 }
 
@@ -424,7 +948,11 @@ function buildCopilotFetch(
   inner: ClientOptions['fetch'],
   copilotToken: string,
 ): ClientOptions['fetch'] {
+  logForDebugging(
+    `[API:buildCopilotFetch] Creating Copilot fetch wrapper with token: ${copilotToken.slice(0, 10)}...`,
+  )
   return async (input, init) => {
+    logForDebugging(`[API:buildCopilotFetch] Copilot fetch called!`)
     const headers = new Headers(init?.headers)
     headers.delete('x-api-key')
     // Headers.delete is case-insensitive — removes any existing Authorization
