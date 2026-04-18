@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import { relative } from 'path'
 import {
+  getIsNonInteractiveSession,
   getOriginalCwd,
   handleAutoModeTransition,
   handlePlanModeTransition,
@@ -714,8 +715,11 @@ export function initialPermissionModeFromCLI({
   // AutoModeOptInDialog from showing in showSetupScreens() when auto can't
   // actually be entered. autoModeFlagCli still carries intent through to
   // verifyAutoModeGateAccess, which notifies the user why.
+  // In non-interactive mode (spawned by another app), honor explicit CLI intent
+  // and bypass the circuit breaker to allow --permission-mode auto.
   const autoModeCircuitBrokenSync = feature('TRANSCRIPT_CLASSIFIER')
-    ? getAutoModeEnabledStateIfCached() === 'disabled'
+    ? getAutoModeEnabledStateIfCached() === 'disabled' &&
+      !getIsNonInteractiveSession()
     : false
 
   // Modes in order of priority
@@ -1088,6 +1092,7 @@ export async function verifyAutoModeGateAccess(
   // after GrowthBook initialization and is the authoritative source for
   // isAutoModeAvailable. The sync startup path uses stale cache; this
   // corrects it. Circuit breaker (enabled==='disabled') takes effect here.
+  // In non-interactive mode, don't set circuit breaker to allow explicit CLI intent.
   const autoModeConfig = await getDynamicConfig_BLOCKS_ON_INIT<{
     enabled?: AutoModeEnabledState
     disableFastMode?: boolean
@@ -1096,8 +1101,10 @@ export async function verifyAutoModeGateAccess(
   const disabledBySettings = isAutoModeDisabledBySettings()
   // Treat settings-disable the same as GrowthBook 'disabled' for circuit-breaker
   // semantics — blocks SDK/explicit re-entry via isAutoModeGateEnabled().
+  // In non-interactive mode, bypass the circuit breaker to honor explicit CLI intent.
   autoModeStateModule?.setAutoModeCircuitBroken(
-    enabledState === 'disabled' || disabledBySettings,
+    (enabledState === 'disabled' || disabledBySettings) &&
+      !getIsNonInteractiveSession(),
   )
 
   // Carousel availability: not circuit-broken, not disabled-by-settings,
@@ -1121,11 +1128,16 @@ export async function verifyAutoModeGateAccess(
       enabledState === 'enabled' || hasAutoModeOptInAnySource()
   }
   // canEnterAuto gates explicit entry (--permission-mode auto, defaultMode: auto)
-  // — explicit entry IS an opt-in, so we only block on circuit breaker + settings + model
+  // — explicit entry IS an opt-in, so we only block on circuit breaker + settings + model.
+  // In non-interactive mode (spawned by another app), honor explicit CLI intent
+  // and bypass the circuit breaker to allow --permission-mode auto.
+  const isNonInteractive = getIsNonInteractiveSession()
   const canEnterAuto =
-    enabledState !== 'disabled' && !disabledBySettings && modelSupported
+    (enabledState !== 'disabled' || isNonInteractive) &&
+    !disabledBySettings &&
+    modelSupported
   logForDebugging(
-    `[auto-mode] verifyAutoModeGateAccess: enabledState=${enabledState} disabledBySettings=${disabledBySettings} model=${mainModel} modelSupported=${modelSupported} disableFastModeBreakerFires=${disableFastModeBreakerFires} carouselAvailable=${carouselAvailable} canEnterAuto=${canEnterAuto}`,
+    `[auto-mode] verifyAutoModeGateAccess: enabledState=${enabledState} disabledBySettings=${disabledBySettings} model=${mainModel} modelSupported=${modelSupported} disableFastModeBreakerFires=${disableFastModeBreakerFires} carouselAvailable=${carouselAvailable} canEnterAuto=${canEnterAuto} isNonInteractive=${isNonInteractive}`,
   )
 
   // Capture CLI-flag intent now (doesn't depend on context).
@@ -1310,8 +1322,11 @@ export function getAutoModeUnavailableReason(): AutoModeUnavailableReason | null
  */
 export type AutoModeEnabledState = 'enabled' | 'disabled' | 'opt-in'
 
-const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState =
-  feature('TRANSCRIPT_CLASSIFIER') ? 'enabled' : 'disabled'
+const AUTO_MODE_ENABLED_DEFAULT: AutoModeEnabledState = feature(
+  'TRANSCRIPT_CLASSIFIER',
+)
+  ? 'enabled'
+  : 'disabled'
 
 function parseAutoModeEnabledState(value: unknown): AutoModeEnabledState {
   if (value === 'enabled' || value === 'disabled' || value === 'opt-in') {

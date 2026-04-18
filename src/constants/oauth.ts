@@ -195,8 +195,22 @@ export function getOauthConfig(): OauthConfig {
     }
   })()
 
+  // Allow overriding BASE_API_URL via ANTHROPIC_BASE_URL from settings.json env config.
+  // This allows enterprise deployments to route API requests through their own endpoints.
+  const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL
+  if (anthropicBaseUrl) {
+    const base = anthropicBaseUrl.replace(/\/$/, '')
+    config = {
+      ...config,
+      BASE_API_URL: base,
+      API_KEY_URL: `${base}/api/oauth/claude_cli/create_api_key`,
+      ROLES_URL: `${base}/api/oauth/claude_cli/roles`,
+    }
+  }
+
   // Allow overriding all OAuth URLs to point to an approved FedStart deployment.
   // Only allowlisted base URLs are accepted to prevent credential leakage.
+  // This takes precedence over ANTHROPIC_BASE_URL for OAuth-specific endpoints.
   const oauthBaseUrl = process.env.CLAUDE_CODE_CUSTOM_OAUTH_URL
   if (oauthBaseUrl) {
     const base = oauthBaseUrl.replace(/\/$/, '')
