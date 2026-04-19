@@ -519,9 +519,11 @@ function getEffectiveAuthToken(): string | undefined {
  * 6. Default production
  */
 function getEffectiveBaseUrl(): string {
-  // Copilot mode
+  // Copilot mode - always use GitHub Copilot endpoint
+  // Don't honor process.env.ANTHROPIC_BASE_URL here since that's intended for Anthropic API,
+  // not the Copilot proxy. Host apps should not set ANTHROPIC_BASE_URL when using copilot auth.
   if (getEffectiveAuthType() === 'copilot') {
-    return process.env.ANTHROPIC_BASE_URL || 'https://api.githubcopilot.com'
+    return 'https://api.githubcopilot.com'
   }
 
   // Special case: "oauth" preset uses default OAuth URL
@@ -814,6 +816,16 @@ function buildFetch(
   const injectClientRequestId =
     getAPIProvider() === 'firstParty' && isFirstPartyAnthropicBaseUrl()
   return (input, init) => {
+    // Redirect count_tokens requests to a mock endpoint
+    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
+    const reqUrl = input instanceof Request ? input.url : String(input)
+    // if (reqUrl.includes('count_tokens') && !isClaudeAISubscriber()) {
+    //   input = 'https://example.com/count_tokens'
+    // }
+    if (reqUrl.includes('count_tokens')) {
+      input = 'https://example.com/count_tokens'
+    }
+
     // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
     const headers = new Headers(init?.headers)
 

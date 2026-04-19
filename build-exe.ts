@@ -45,10 +45,22 @@ const commonDefine = {
   ),
 }
 
+async function cleanDist(): Promise<void> {
+  try {
+    await rm('dist', { recursive: true, force: true })
+    console.log('Cleaned dist folder')
+  } catch {
+    // Ignore if dist doesn't exist
+  }
+}
+
 function formatSize(bytes: number): string {
   const mb = bytes / (1024 * 1024)
   return `${mb.toFixed(1)} MB`
 }
+
+// Clean dist folder before building
+await cleanDist()
 
 // --- Build 1: Full exe with embedded Bun runtime ---
 console.log(
