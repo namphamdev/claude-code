@@ -139,10 +139,7 @@ export function getDefaultOpusModel(): ModelName {
 export function getDefaultSonnetModel(): ModelName {
   const provider = getAPIProvider()
   // For OpenAI provider, check OPENAI_DEFAULT_SONNET_MODEL first
-  if (
-    provider === 'openai' &&
-    process.env.OPENAI_DEFAULT_SONNET_MODEL
-  ) {
+  if (provider === 'openai' && process.env.OPENAI_DEFAULT_SONNET_MODEL) {
     return process.env.OPENAI_DEFAULT_SONNET_MODEL
   }
   // For Gemini provider, check GEMINI_DEFAULT_SONNET_MODEL
@@ -261,6 +258,9 @@ export function firstPartyNameToCanonical(name: ModelName): ModelShortName {
   name = name.toLowerCase()
   // Special cases for Claude 4+ models to differentiate versions
   // Order matters: check more specific versions first (4-5 before 4)
+  if (name.includes('claude-opus-4-7')) {
+    return 'claude-opus-4-7'
+  }
   if (name.includes('claude-opus-4-6')) {
     return 'claude-opus-4-6'
   }
