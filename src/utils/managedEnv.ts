@@ -186,13 +186,27 @@ export function applySafeConfigEnvironmentVariables(): void {
 }
 
 /**
- * Returns the env vars from the active named preset (settings.envs[settings.activeEnv]),
+ * Resolves the active environment name from settings.
+ * Accepts either the top-level `activeEnv` field or `env.activeEnv` as a fallback,
+ * so both `{ activeEnv: "foo" }` and `{ env: { activeEnv: "foo" } }` work.
+ */
+export function resolveActiveEnv(
+  settings: ReturnType<typeof getSettings_DEPRECATED>,
+): string | undefined {
+  return (
+    settings?.activeEnv ??
+    (settings?.env as Record<string, string> | undefined)?.['activeEnv']
+  )
+}
+
+/**
+ * Returns the env vars from the active named preset (settings.envs[resolveActiveEnv(settings)]),
  * or an empty object if no preset is selected or the name doesn't exist.
  */
 function getActiveEnvPreset(
   settings: ReturnType<typeof getSettings_DEPRECATED>,
 ): Record<string, string> {
-  const activeEnv = settings?.activeEnv
+  const activeEnv = resolveActiveEnv(settings)
   if (!activeEnv || !settings?.envs) return {}
   return settings.envs[activeEnv] ?? {}
 }

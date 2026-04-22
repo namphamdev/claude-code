@@ -1,16 +1,19 @@
 import type { Command } from '../../commands.js'
 import type { LocalCommandCall } from '../../types/command.js'
-import { applyConfigEnvironmentVariables } from '../../utils/managedEnv.js'
+import {
+  applyConfigEnvironmentVariables,
+  resolveActiveEnv,
+} from '../../utils/managedEnv.js'
 import {
   getSettings_DEPRECATED,
   updateSettingsForSource,
 } from '../../utils/settings/settings.js'
 
-const call: LocalCommandCall = async (args) => {
+const call: LocalCommandCall = async args => {
   const arg = args.trim()
   const settings = getSettings_DEPRECATED()
   const envs = settings?.envs ?? {}
-  const activeEnv = settings?.activeEnv
+  const activeEnv = resolveActiveEnv(settings)
 
   // No argument: list available envs and show active one
   if (!arg) {
@@ -22,7 +25,7 @@ const call: LocalCommandCall = async (args) => {
           'No named environments configured. Add an "envs" map to your settings.json.',
       }
     }
-    const lines = names.map((name) => {
+    const lines = names.map(name => {
       const marker = name === activeEnv ? '* ' : '  '
       return `${marker}${name}`
     })
@@ -57,7 +60,8 @@ const call: LocalCommandCall = async (args) => {
 const envCommand = {
   type: 'local',
   name: 'env',
-  description: 'List or switch named environment presets (from settings.json "envs")',
+  description:
+    'List or switch named environment presets (from settings.json "envs")',
   aliases: [],
   argumentHint: '[name|unset]',
   supportsNonInteractive: true,

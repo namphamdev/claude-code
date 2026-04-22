@@ -97,6 +97,7 @@ function PromptInputFooter({
   onOpenTasksDialog,
 }: Props): ReactNode {
   const settings = useSettings();
+  const activeEnv = settings?.activeEnv ?? (settings?.env as Record<string, string> | undefined)?.['activeEnv'];
   const { columns, rows } = useTerminalSize();
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
@@ -191,7 +192,7 @@ function PromptInputFooter({
             />
           )}
           {process.env.USER_TYPE === 'ant' && isUndercover() && <Text dimColor>undercover</Text>}
-          {settings?.activeEnv && <Text dimColor>env:{settings.activeEnv}</Text>}
+          {activeEnv && <Text dimColor>env:{activeEnv}</Text>}
           <BridgeStatusIndicator bridgeSelected={bridgeSelected} />
         </Box>
       </Box>

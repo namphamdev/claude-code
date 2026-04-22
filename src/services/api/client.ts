@@ -26,6 +26,7 @@ import {
 } from '../../bootstrap/state.js'
 import { getOauthConfig } from '../../constants/oauth.js'
 import { getSettings_DEPRECATED } from '../../utils/settings/settings.js'
+import { resolveActiveEnv } from '../../utils/managedEnv.js'
 import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
 import {
   getAWSRegion,
@@ -437,8 +438,9 @@ function getEffectiveAuthType(): string | undefined {
   // Read directly from settings - handles active env preset
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
-      const activePreset = settings.envs[settings.activeEnv]
+    const activeEnvName = resolveActiveEnv(settings)
+    if (activeEnvName && settings?.envs?.[activeEnvName]) {
+      const activePreset = settings.envs[activeEnvName]
       if (
         activePreset?.ANTHROPIC_AUTH_TYPE !== undefined &&
         activePreset?.ANTHROPIC_AUTH_TYPE !== ''
@@ -473,7 +475,7 @@ function getEffectiveAuthToken(): string | undefined {
   // Special case: "oauth" preset means use OAuth authentication
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+    if (resolveActiveEnv(settings)?.toLowerCase() === 'oauth') {
       return undefined // Let OAuth take over
     }
   } catch {
@@ -488,8 +490,9 @@ function getEffectiveAuthToken(): string | undefined {
   // Read directly from settings - handles active env preset
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
-      const activePreset = settings.envs[settings.activeEnv]
+    const activeEnvName = resolveActiveEnv(settings)
+    if (activeEnvName && settings?.envs?.[activeEnvName]) {
+      const activePreset = settings.envs[activeEnvName]
       if (activePreset?.ANTHROPIC_AUTH_TOKEN) {
         return activePreset.ANTHROPIC_AUTH_TOKEN
       }
@@ -529,7 +532,7 @@ function getEffectiveBaseUrl(): string {
   // Special case: "oauth" preset uses default OAuth URL
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+    if (resolveActiveEnv(settings)?.toLowerCase() === 'oauth') {
       return getOauthConfig().BASE_API_URL
     }
   } catch {
@@ -541,8 +544,9 @@ function getEffectiveBaseUrl(): string {
   // when CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST is set
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv && settings?.envs?.[settings.activeEnv]) {
-      const activePreset = settings.envs[settings.activeEnv]
+    const activeEnvName = resolveActiveEnv(settings)
+    if (activeEnvName && settings?.envs?.[activeEnvName]) {
+      const activePreset = settings.envs[activeEnvName]
       if (activePreset?.ANTHROPIC_BASE_URL) {
         return activePreset.ANTHROPIC_BASE_URL.replace(/\/$/, '')
       }
@@ -584,7 +588,7 @@ function getBaseUrlSource(): string {
   // Special case: "oauth" preset
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+    if (resolveActiveEnv(settings)?.toLowerCase() === 'oauth') {
       return 'oauth'
     }
   } catch {
@@ -594,11 +598,9 @@ function getBaseUrlSource(): string {
   // Read from settings (matches getEffectiveBaseUrl priority)
   try {
     const settings = getSettings_DEPRECATED()
-    if (
-      settings?.activeEnv &&
-      settings?.envs?.[settings.activeEnv]?.ANTHROPIC_BASE_URL
-    ) {
-      return `activeEnv[${settings.activeEnv}]`
+    const activeEnvName = resolveActiveEnv(settings)
+    if (activeEnvName && settings?.envs?.[activeEnvName]?.ANTHROPIC_BASE_URL) {
+      return `activeEnv[${activeEnvName}]`
     }
     if (settings?.env?.ANTHROPIC_BASE_URL) {
       return 'settings.env'
@@ -624,7 +626,7 @@ function getAuthTokenSource(): string {
   // Special case: "oauth" preset
   try {
     const settings = getSettings_DEPRECATED()
-    if (settings?.activeEnv?.toLowerCase() === 'oauth') {
+    if (resolveActiveEnv(settings)?.toLowerCase() === 'oauth') {
       return 'oauth (preset)'
     }
   } catch {
@@ -634,11 +636,12 @@ function getAuthTokenSource(): string {
   // Read from settings (matches getEffectiveAuthToken priority)
   try {
     const settings = getSettings_DEPRECATED()
+    const activeEnvName = resolveActiveEnv(settings)
     if (
-      settings?.activeEnv &&
-      settings?.envs?.[settings.activeEnv]?.ANTHROPIC_AUTH_TOKEN
+      activeEnvName &&
+      settings?.envs?.[activeEnvName]?.ANTHROPIC_AUTH_TOKEN
     ) {
-      return `activeEnv[${settings.activeEnv}]`
+      return `activeEnv[${activeEnvName}]`
     }
     if (settings?.env?.ANTHROPIC_AUTH_TOKEN) {
       return 'settings.env'
@@ -771,7 +774,7 @@ export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
 function getMappedModel(model: string): string {
   try {
     const settings = getSettings_DEPRECATED()
-    const activeEnvName = settings?.activeEnv
+    const activeEnvName = resolveActiveEnv(settings)
     if (!activeEnvName || !settings?.envs?.[activeEnvName]) {
       return model
     }
