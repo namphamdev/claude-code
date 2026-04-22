@@ -1502,16 +1502,20 @@ export function hasUnresolvedHooksFromLookup(
 export function getToolUseIDs(
   normalizedMessages: NormalizedMessage[],
 ): Set<string> {
-  return new Set(
-    normalizedMessages
-      .filter(
-        (_): _ is NormalizedAssistantMessage<BetaToolUseBlock> =>
-          _.type === 'assistant' &&
-          Array.isArray(_.message.content) &&
-          _.message.content[0]?.type === 'tool_use',
-      )
-      .map(_ => (_.message.content[0] as BetaToolUseBlock).id),
-  )
+  const ids = new Set<string>()
+  for (let i = 0; i < normalizedMessages.length; i++) {
+    const msg = normalizedMessages[i]
+    if (
+      msg &&
+      msg.type === 'assistant' &&
+      Array.isArray(msg.message.content) &&
+      msg.message.content.length > 0 &&
+      msg.message.content[0]?.type === 'tool_use'
+    ) {
+      ids.add((msg.message.content[0] as BetaToolUseBlock).id)
+    }
+  }
+  return ids
 }
 
 /**
