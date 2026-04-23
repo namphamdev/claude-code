@@ -293,14 +293,22 @@ function OverviewTab({
   const { columns: terminalWidth } = useTerminalSize()
 
   // Calculate favorite model and total tokens
-  const modelEntries = Object.entries(stats.modelUsage).sort(
-    ([, a], [, b]) =>
-      b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+  const modelEntries = useMemo(
+    () =>
+      Object.entries(stats.modelUsage).sort(
+        ([, a], [, b]) =>
+          b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+      ),
+    [stats.modelUsage],
   )
   const favoriteModel = modelEntries[0]
-  const totalTokens = modelEntries.reduce(
-    (sum, [, usage]) => sum + usage.inputTokens + usage.outputTokens,
-    0,
+  const totalTokens = useMemo(
+    () =>
+      modelEntries.reduce(
+        (sum, [, usage]) => sum + usage.inputTokens + usage.outputTokens,
+        0,
+      ),
+    [modelEntries],
   )
 
   // Memoize the factoid so it doesn't change when switching tabs
@@ -617,9 +625,13 @@ function ModelsTab({
   const { columns: terminalWidth } = useTerminalSize()
   const VISIBLE_MODELS = 4 // Show 4 models at a time (2 per column)
 
-  const modelEntries = Object.entries(stats.modelUsage).sort(
-    ([, a], [, b]) =>
-      b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+  const modelEntries = useMemo(
+    () =>
+      Object.entries(stats.modelUsage).sort(
+        ([, a], [, b]) =>
+          b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
+      ),
+    [stats.modelUsage],
   )
 
   // Handle scrolling with arrow keys
@@ -652,9 +664,13 @@ function ModelsTab({
     )
   }
 
-  const totalTokens = modelEntries.reduce(
-    (sum, [, usage]) => sum + usage.inputTokens + usage.outputTokens,
-    0,
+  const totalTokens = useMemo(
+    () =>
+      modelEntries.reduce(
+        (sum, [, usage]) => sum + usage.inputTokens + usage.outputTokens,
+        0,
+      ),
+    [modelEntries],
   )
 
   // Generate token usage chart - use terminal width for responsive sizing
