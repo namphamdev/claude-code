@@ -70,9 +70,13 @@ export const TaskListTool = buildTool({
     )
 
     // Build a set of resolved task IDs for filtering
-    const resolvedTaskIds = new Set(
-      allTasks.filter(t => t.status === 'completed').map(t => t.id),
-    )
+    // ⚡ Bolt: Removed .filter().map() chain to reduce array allocations and GC pressure
+    const resolvedTaskIds = new Set<string>()
+    for (const t of allTasks) {
+      if (t.status === 'completed') {
+        resolvedTaskIds.add(t.id)
+      }
+    }
 
     const tasks = allTasks.map(task => ({
       id: task.id,
