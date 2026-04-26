@@ -1,0 +1,3 @@
+## 2025-04-26 - Avoid intermediate array allocations by replacing `.filter().map()` chains with a single `for` loop
+**Learning:** Using chained array methods like `.filter().map()` creates intermediate arrays that are immediately discarded, increasing garbage collection pressure and allocations, which is particularly harmful in hot React components or frequently called utility functions.
+**Action:** Use a single `for` loop to populate target structures directly (like `Set`) instead of chaining array methods.
