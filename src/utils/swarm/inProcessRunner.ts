@@ -593,9 +593,13 @@ async function sendIdleNotification(
  * A task is available if it's pending, has no owner, and is not blocked.
  */
 function findAvailableTask(tasks: Task[]): Task | undefined {
-  const unresolvedTaskIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
-  )
+  // ⚡ Bolt: Single pass avoids intermediate array allocations
+  const unresolvedTaskIds = new Set<string>()
+  for (const t of tasks) {
+    if (t.status !== 'completed') {
+      unresolvedTaskIds.add(t.id)
+    }
+  }
 
   return tasks.find(task => {
     if (task.status !== 'pending') return false
@@ -1235,8 +1239,13 @@ export async function runInProcessTeammate(
                 // Track in-progress tool use IDs for animation in transcript view
                 let inProgressToolUseIDs = task.inProgressToolUseIDs
                 if (message.type === 'assistant') {
-                  for (const block of (Array.isArray(message.message.content) ? message.message.content : [])) {
-                    if (typeof block !== 'string' && block.type === 'tool_use') {
+                  for (const block of Array.isArray(message.message.content)
+                    ? message.message.content
+                    : []) {
+                    if (
+                      typeof block !== 'string' &&
+                      block.type === 'tool_use'
+                    ) {
                       inProgressToolUseIDs = new Set([
                         ...(inProgressToolUseIDs ?? []),
                         block.id,
