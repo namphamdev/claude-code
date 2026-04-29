@@ -1,0 +1,3 @@
+## 2024-05-14 - Intermediate Array Allocations
+**Learning:** Found multiple instances where `.filter().map()` was chained inside a `new Set()` call (e.g., `new Set(tasks.filter(...).map(...))`). This is an anti-pattern for performance as it forces the JS engine to allocate and garbage collect two intermediate arrays before initializing the Set. This is especially impactful in frequently rendering React components like `TaskListV2.tsx` or in hot paths handling large arrays.
+**Action:** Replace `new Set(array.filter().map())` with a direct `for...of` loop calling `.add()` to eliminate intermediate array allocations.
