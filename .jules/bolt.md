@@ -1,0 +1,3 @@
+## 2024-05-07 - Avoid chained array allocations on large lists
+**Learning:** Found a specific codebase performance pattern involving large list transformations. Using `.filter(...).map(...)` inside `new Set(...)` calls on large arrays (like `tasks`) creates two unnecessary intermediate arrays, increasing garbage collection pressure and CPU time in hot paths (especially in React components like `TaskListV2`).
+**Action:** Replace `.filter(...).map(...)` chains with a single `for` loop that populates the `Set` directly when processing large collections, particularly in render paths or frequently called utility functions.
