@@ -1,0 +1,3 @@
+## 2024-05-18 - Avoid array method chains when populating Sets in hot paths
+**Learning:** This codebase frequently renders large message/task arrays. Chaining array methods like `.filter().map()` to populate target structures (e.g., `Set`) creates unnecessary intermediate array allocations, increasing garbage collection pressure and negatively impacting performance during frequent renders.
+**Action:** Replace `.filter().map()` chains with a single `for` loop that populates the target structure directly.
