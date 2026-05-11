@@ -1,0 +1,3 @@
+## 2024-05-11 - Chained Array Methods Performance Overhead
+**Learning:** In hot paths and frequently executed rendering cycles, chaining array methods like `array.filter(condition).map(transformation)` causes noticeable performance overhead due to the creation and garbage collection of multiple intermediate array objects. This codebase makes significant use of Tasks lists that require this traversal.
+**Action:** Replace these chained calls with a single `for` loop that performs filtering and mapping simultaneously into the target data structure (like a `Set`) when optimizing hot path performance.
