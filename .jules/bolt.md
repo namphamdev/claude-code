@@ -1,0 +1,3 @@
+## 2025-02-18 - Array Allocation Overhead in Hot Paths
+**Learning:** Found an anti-pattern throughout the codebase where `items.filter(...).map(...)` was used to populate `Set` objects during React render cycles (e.g., in `TaskListV2.tsx`, `Spinner.tsx`) and frequent utility calls (e.g., `inProcessRunner.ts`). This chaining creates two intermediate arrays per execution, causing significant but hidden garbage collection pressure when running on frequently updated task lists or rendering ticks.
+**Action:** Replace `items.filter(condition).map(extract)` chains with a single `for...of` loop when building Sets or Maps in frequently called functions or render paths to eliminate intermediate allocations.
