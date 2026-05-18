@@ -1,0 +1,3 @@
+## 2025-02-28 - Optimize Array Iteration in React Components and Utilities
+**Learning:** Found multiple instances where array items were passed through `.filter().map()` chains in React components (`TaskListV2.tsx`, `Spinner.tsx`) and core utilities (`tasks.ts`), causing intermediate array allocations inside hot execution paths. This puts pressure on garbage collection.
+**Action:** When filtering and transforming array items (especially into a `Set` or when concurrently gathering lengths/counts), write a single `for` loop to compute the necessary structures in O(N) time with minimal intermediate allocations.

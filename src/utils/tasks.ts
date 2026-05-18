@@ -583,9 +583,14 @@ export async function claimTask(
 
     // Check for unresolved blockers (open or in_progress tasks block)
     const allTasks = await listTasks(taskListId)
-    const unresolvedTaskIds = new Set(
-      allTasks.filter(t => t.status !== 'completed').map(t => t.id),
-    )
+    const unresolvedTaskIds = new Set<string>()
+    for (let i = 0; i < allTasks.length; i++) {
+      const t = allTasks[i]!
+      if (t.status !== 'completed') {
+        unresolvedTaskIds.add(t.id)
+      }
+    }
+
     const blockedByTasks = task.blockedBy.filter(id =>
       unresolvedTaskIds.has(id),
     )
@@ -647,9 +652,19 @@ async function claimTaskWithBusyCheck(
     }
 
     // Check for unresolved blockers (open or in_progress tasks block)
-    const unresolvedTaskIds = new Set(
-      allTasks.filter(t => t.status !== 'completed').map(t => t.id),
-    )
+    const unresolvedTaskIds = new Set<string>()
+    const agentOpenTasks: Task[] = []
+
+    for (let i = 0; i < allTasks.length; i++) {
+      const t = allTasks[i]!
+      if (t.status !== 'completed') {
+        unresolvedTaskIds.add(t.id)
+        if (t.owner === claimantAgentId && t.id !== taskId) {
+          agentOpenTasks.push(t)
+        }
+      }
+    }
+
     const blockedByTasks = task.blockedBy.filter(id =>
       unresolvedTaskIds.has(id),
     )
@@ -658,12 +673,6 @@ async function claimTaskWithBusyCheck(
     }
 
     // Check if agent is busy with other unresolved tasks
-    const agentOpenTasks = allTasks.filter(
-      t =>
-        t.status !== 'completed' &&
-        t.owner === claimantAgentId &&
-        t.id !== taskId,
-    )
     if (agentOpenTasks.length > 0) {
       return {
         success: false,
