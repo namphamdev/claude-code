@@ -44,17 +44,35 @@ export function TaskListV2({
   // Track when each task was last observed transitioning to completed
   const completionTimestampsRef = React.useRef(new Map<string, number>())
   const previousCompletedIdsRef = React.useRef<Set<string> | null>(null)
+
+  // Gather metrics and IDs in a single pass to reduce array iterations
+  // and intermediate garbage collection
+  const currentCompletedIds = new Set<string>()
+  const unresolvedTaskIds = new Set<string>()
+  let completedCount = 0
+  let pendingCount = 0
+  const completedTasks: Task[] = []
+
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i]!
+    if (t.status === 'completed') {
+      currentCompletedIds.add(t.id)
+      completedCount++
+      completedTasks.push(t)
+    } else {
+      unresolvedTaskIds.add(t.id)
+      if (t.status === 'pending') {
+        pendingCount++
+      }
+    }
+  }
+
   if (previousCompletedIdsRef.current === null) {
-    previousCompletedIdsRef.current = new Set(
-      tasks.filter(t => t.status === 'completed').map(t => t.id),
-    )
+    previousCompletedIdsRef.current = currentCompletedIds
   }
   const maxDisplay = rows <= 10 ? 0 : Math.min(10, Math.max(3, rows - 14))
 
   // Update completion timestamps: reset when a task transitions to completed
-  const currentCompletedIds = new Set(
-    tasks.filter(t => t.status === 'completed').map(t => t.id),
-  )
   const now = Date.now()
   for (const id of currentCompletedIds) {
     if (!previousCompletedIdsRef.current.has(id)) {
@@ -141,13 +159,8 @@ export function TaskListV2({
   }
 
   // Get task counts for display
-  const completedCount = count(tasks, t => t.status === 'completed')
-  const pendingCount = count(tasks, t => t.status === 'pending')
   const inProgressCount = tasks.length - completedCount - pendingCount
   // Unresolved tasks (open or in_progress) block dependent tasks
-  const unresolvedTaskIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
-  )
 
   // Check if we need to truncate
   const needsTruncation = tasks.length > maxDisplay
@@ -159,7 +172,7 @@ export function TaskListV2({
     // Prioritize: recently completed (within 30s), in-progress, pending, older completed
     const recentCompleted: Task[] = []
     const olderCompleted: Task[] = []
-    for (const task of tasks.filter(t => t.status === 'completed')) {
+    for (const task of completedTasks) {
       const ts = completionTimestampsRef.current.get(task.id)
       if (ts && now - ts < RECENT_COMPLETED_TTL_MS) {
         recentCompleted.push(task)
