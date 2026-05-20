@@ -1,0 +1,3 @@
+## 2024-05-20 - Prevent intermediate array allocations in Set population
+**Learning:** Chaining array methods like `.filter().map()` to populate a Set creates unnecessary intermediate arrays and puts pressure on garbage collection. This is especially problematic in hot paths like React component render functions (e.g., `TaskListV2.tsx`) and frequent API-related tasks (e.g., `tasks.ts` and `TaskListTool.ts`).
+**Action:** Always prefer using a single `for` loop to populate target structures like `Set` from arrays instead of `.filter().map()` chains to reduce memory overhead and improve performance.
