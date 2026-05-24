@@ -1944,7 +1944,10 @@ function sanitizeErrorToolResultContent(
       if (!Array.isArray(trContent)) return b
       if (trContent.every(c => c.type === 'text')) return b
       changed = true
-      const texts = trContent.filter(c => c.type === 'text').map(c => c.text)
+      const texts: string[] = []
+      for (let i = 0; i < trContent.length; i++) {
+        if (trContent[i].type === 'text') texts.push(trContent[i].text)
+      }
       const textOnly: TextBlockParam[] =
         texts.length > 0 ? [{ type: 'text', text: texts.join('\n\n') }] : []
       return { ...b, content: textOnly }

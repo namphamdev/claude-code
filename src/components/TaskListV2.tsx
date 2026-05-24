@@ -45,16 +45,19 @@ export function TaskListV2({
   const completionTimestampsRef = React.useRef(new Map<string, number>())
   const previousCompletedIdsRef = React.useRef<Set<string> | null>(null)
   if (previousCompletedIdsRef.current === null) {
-    previousCompletedIdsRef.current = new Set(
-      tasks.filter(t => t.status === 'completed').map(t => t.id),
-    )
+    const initialCompletedIds = new Set<string>()
+    for (let i = 0; i < tasks.length; i++) {
+      if (tasks[i].status === 'completed') initialCompletedIds.add(tasks[i].id)
+    }
+    previousCompletedIdsRef.current = initialCompletedIds
   }
   const maxDisplay = rows <= 10 ? 0 : Math.min(10, Math.max(3, rows - 14))
 
   // Update completion timestamps: reset when a task transitions to completed
-  const currentCompletedIds = new Set(
-    tasks.filter(t => t.status === 'completed').map(t => t.id),
-  )
+  const currentCompletedIds = new Set<string>()
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i].status === 'completed') currentCompletedIds.add(tasks[i].id)
+  }
   const now = Date.now()
   for (const id of currentCompletedIds) {
     if (!previousCompletedIdsRef.current.has(id)) {
@@ -145,9 +148,10 @@ export function TaskListV2({
   const pendingCount = count(tasks, t => t.status === 'pending')
   const inProgressCount = tasks.length - completedCount - pendingCount
   // Unresolved tasks (open or in_progress) block dependent tasks
-  const unresolvedTaskIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
-  )
+  const unresolvedTaskIds = new Set<string>()
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i].status !== 'completed') unresolvedTaskIds.add(tasks[i].id)
+  }
 
   // Check if we need to truncate
   const needsTruncation = tasks.length > maxDisplay
