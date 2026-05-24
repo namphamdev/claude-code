@@ -195,9 +195,10 @@ export function useTaskListWatcher({
  * - Not blocked by any unresolved tasks
  */
 function findAvailableTask(tasks: Task[]): Task | undefined {
-  const unresolvedTaskIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
-  )
+  const unresolvedTaskIds = new Set<string>()
+  for (let i = 0; i < tasks.length; i++) {
+    if (tasks[i].status !== 'completed') unresolvedTaskIds.add(tasks[i].id)
+  }
 
   return tasks.find(task => {
     if (task.status !== 'pending') return false
