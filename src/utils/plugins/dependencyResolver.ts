@@ -179,7 +179,10 @@ export function verifyAndDemote(plugins: readonly LoadedPlugin[]): {
   errors: PluginError[]
 } {
   const known = new Set(plugins.map(p => p.source))
-  const enabled = new Set(plugins.filter(p => p.enabled).map(p => p.source))
+  const enabled = new Set<string>()
+  for (const p of plugins) {
+    if (p.enabled) enabled.add(p.source)
+  }
   // Name-only indexes for bare deps from --plugin-dir (@inline) plugins:
   // the real marketplace is unknown, so match "B" against any enabled "B@*".
   // enabledByName is a multiset: if B@epic AND B@other are both enabled,
