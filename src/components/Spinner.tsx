@@ -593,13 +593,23 @@ function findNextPendingTask(tasks: Task[] | undefined): Task | undefined {
   if (!tasks) {
     return undefined
   }
-  const pendingTasks = tasks.filter(t => t.status === 'pending')
+
+  const pendingTasks: Task[] = []
+  const unresolvedIds = new Set<string>()
+
+  for (const task of tasks) {
+    if (task.status === 'pending') {
+      pendingTasks.push(task)
+    }
+    if (task.status !== 'completed') {
+      unresolvedIds.add(task.id)
+    }
+  }
+
   if (pendingTasks.length === 0) {
     return undefined
   }
-  const unresolvedIds = new Set(
-    tasks.filter(t => t.status !== 'completed').map(t => t.id),
-  )
+
   return (
     pendingTasks.find(t => !t.blockedBy.some(id => unresolvedIds.has(id))) ??
     pendingTasks[0]
