@@ -25,7 +25,12 @@ const GROUPING_CACHE = new WeakMap<Tools, Set<string>>()
 function getToolsWithGrouping(tools: Tools): Set<string> {
   let cached = GROUPING_CACHE.get(tools)
   if (!cached) {
-    cached = new Set(tools.filter(t => t.renderGroupedToolUse).map(t => t.name))
+    // ⚡ Bolt optimization: Avoid intermediate array allocations by using a for loop
+    // instead of chained .filter().map(). This reduces GC overhead.
+    cached = new Set<string>()
+    for (const t of tools) {
+      if (t.renderGroupedToolUse) cached.add(t.name)
+    }
     GROUPING_CACHE.set(tools, cached)
   }
   return cached

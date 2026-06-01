@@ -1,0 +1,3 @@
+## 2024-06-01 - Avoid Chained Array Methods in Hot Paths
+**Learning:** Chaining array methods like `.filter(...).map(...)` creates intermediate array allocations that must be garbage-collected, which can cause significant memory pressure and GC overhead in frequently called paths like React component renders (e.g., `TaskListV2.tsx`, `Spinner.tsx`) or continuous backend task runners.
+**Action:** When extracting data from collections in hot paths, favor a single-pass `for` loop to populate target structures directly (e.g., `new Set<string>()` or `new Array<string>()`). This avoids creating unneeded intermediate arrays and makes the code slightly faster while remaining perfectly readable.
