@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, mock } from "bun:test";
+
+mock.module("bun:bundle", () => ({ feature: () => false }));
+
 import {
   deriveShortMessageId,
   INTERRUPT_MESSAGE,
