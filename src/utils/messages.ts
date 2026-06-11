@@ -1114,20 +1114,20 @@ export function hasUnresolvedHooks(
 export function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
   [toolUseID: string]: boolean
 } {
-  return Object.fromEntries(
-    normalizedMessages.flatMap(_ =>
-      _.type === 'user' &&
-      Array.isArray(_.message.content) &&
-      _.message.content[0]?.type === 'tool_result'
-        ? [
-            [
-              (_.message.content[0] as ToolResultBlockParam).tool_use_id,
-              (_.message.content[0] as ToolResultBlockParam).is_error ?? false,
-            ],
-          ]
-        : ([] as [string, boolean][]),
-    ),
-  )
+  // Optimization: use a single for-loop instead of .flatMap() to avoid intermediate array allocations
+  // and reduce garbage collection pressure.
+  const result: { [toolUseID: string]: boolean } = {}
+  for (const msg of normalizedMessages) {
+    if (
+      msg.type === 'user' &&
+      Array.isArray(msg.message.content) &&
+      msg.message.content[0]?.type === 'tool_result'
+    ) {
+      const toolResult = msg.message.content[0] as ToolResultBlockParam
+      result[toolResult.tool_use_id] = toolResult.is_error ?? false
+    }
+  }
+  return result
 }
 
 export function getSiblingToolUseIDs(
@@ -1502,16 +1502,19 @@ export function hasUnresolvedHooksFromLookup(
 export function getToolUseIDs(
   normalizedMessages: NormalizedMessage[],
 ): Set<string> {
-  return new Set(
-    normalizedMessages
-      .filter(
-        (_): _ is NormalizedAssistantMessage<BetaToolUseBlock> =>
-          _.type === 'assistant' &&
-          Array.isArray(_.message.content) &&
-          _.message.content[0]?.type === 'tool_use',
-      )
-      .map(_ => (_.message.content[0] as BetaToolUseBlock).id),
-  )
+  // Optimization: use a single for-loop instead of .filter().map() to avoid intermediate array allocations
+  // and reduce garbage collection pressure.
+  const result = new Set<string>()
+  for (const msg of normalizedMessages) {
+    if (
+      msg.type === 'assistant' &&
+      Array.isArray(msg.message.content) &&
+      msg.message.content[0]?.type === 'tool_use'
+    ) {
+      result.add((msg.message.content[0] as BetaToolUseBlock).id)
+    }
+  }
+  return result
 }
 
 /**
