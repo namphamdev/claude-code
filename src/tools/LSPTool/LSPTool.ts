@@ -831,30 +831,54 @@ function formatResult(
 /**
  * Counts unique files from CallHierarchyItem array
  * Filters out items with undefined URIs
+ *
+ * ⚡ Optimization: Populating Set directly via for-loop avoids intermediate array
+ * allocations from chaining `.map().filter()`, reducing GC pressure for large LSP payloads.
  */
 function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
-  const validUris = items.map(item => item.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const item of items) {
+    if (item.uri) {
+      validUris.add(item.uri)
+    }
+  }
+  return validUris.size
 }
 
 /**
  * Counts unique files from CallHierarchyIncomingCall array
  * Filters out calls with undefined URIs
+ *
+ * ⚡ Optimization: Populating Set directly via for-loop avoids intermediate array
+ * allocations from chaining `.map().filter()`, reducing GC pressure for large LSP payloads.
  */
 function countUniqueFilesFromIncomingCalls(
   calls: CallHierarchyIncomingCall[],
 ): number {
-  const validUris = calls.map(call => call.from?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.from?.uri) {
+      validUris.add(call.from.uri)
+    }
+  }
+  return validUris.size
 }
 
 /**
  * Counts unique files from CallHierarchyOutgoingCall array
  * Filters out calls with undefined URIs
+ *
+ * ⚡ Optimization: Populating Set directly via for-loop avoids intermediate array
+ * allocations from chaining `.map().filter()`, reducing GC pressure for large LSP payloads.
  */
 function countUniqueFilesFromOutgoingCalls(
   calls: CallHierarchyOutgoingCall[],
 ): number {
-  const validUris = calls.map(call => call.to?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.to?.uri) {
+      validUris.add(call.to.uri)
+    }
+  }
+  return validUris.size
 }
