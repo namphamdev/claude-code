@@ -833,8 +833,12 @@ function formatResult(
  * Filters out items with undefined URIs
  */
 function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
-  const validUris = items.map(item => item.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (let i = 0; i < items.length; i++) {
+    const uri = items[i].uri
+    if (uri) validUris.add(uri)
+  }
+  return validUris.size
 }
 
 /**
@@ -844,8 +848,12 @@ function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
 function countUniqueFilesFromIncomingCalls(
   calls: CallHierarchyIncomingCall[],
 ): number {
-  const validUris = calls.map(call => call.from?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (let i = 0; i < calls.length; i++) {
+    const uri = calls[i].from?.uri
+    if (uri) validUris.add(uri)
+  }
+  return validUris.size
 }
 
 /**
@@ -855,6 +863,10 @@ function countUniqueFilesFromIncomingCalls(
 function countUniqueFilesFromOutgoingCalls(
   calls: CallHierarchyOutgoingCall[],
 ): number {
-  const validUris = calls.map(call => call.to?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (let i = 0; i < calls.length; i++) {
+    const uri = calls[i].to?.uri
+    if (uri) validUris.add(uri)
+  }
+  return validUris.size
 }
