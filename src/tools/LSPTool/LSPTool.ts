@@ -345,31 +345,56 @@ export const LSPTool = buildTool({
         if (input.operation === 'workspaceSymbol') {
           // SymbolInformation has location.uri — filter by extracting locations
           const symbols = result as SymbolInformation[]
-          const locations = symbols
-            .filter(s => s?.location?.uri)
-            .map(s => s.location)
+          const locations: Location[] = []
+          // ⚡ Bolt Optimization: Use for-loop instead of .filter().map() to avoid intermediate array allocation
+          for (const s of symbols) {
+            if (s?.location?.uri) {
+              locations.push(s.location)
+            }
+          }
           const filteredLocations = await filterGitIgnoredLocations(
             locations,
             cwd,
           )
-          const filteredUris = new Set(filteredLocations.map(l => l.uri))
-          result = symbols.filter(
-            s => !s?.location?.uri || filteredUris.has(s.location.uri),
-          )
+          const filteredUris = new Set<string>()
+          // ⚡ Bolt Optimization: Build Set via loop instead of .map() to avoid intermediate array allocation
+          for (const l of filteredLocations) {
+            filteredUris.add(l.uri)
+          }
+
+          const finalSymbols: SymbolInformation[] = []
+          for (const s of symbols) {
+            if (!s?.location?.uri || filteredUris.has(s.location.uri)) {
+              finalSymbols.push(s)
+            }
+          }
+          result = finalSymbols
         } else {
           // Location[] or (Location | LocationLink)[]
-          const locations = (result as (Location | LocationLink)[]).map(
-            toLocation,
-          )
+          const rawItems = result as (Location | LocationLink)[]
+          const locations: Location[] = []
+          // ⚡ Bolt Optimization: Use for-loop instead of .map() to avoid intermediate array allocation
+          for (const item of rawItems) {
+            locations.push(toLocation(item))
+          }
           const filteredLocations = await filterGitIgnoredLocations(
             locations,
             cwd,
           )
-          const filteredUris = new Set(filteredLocations.map(l => l.uri))
-          result = (result as (Location | LocationLink)[]).filter(item => {
+          const filteredUris = new Set<string>()
+          // ⚡ Bolt Optimization: Build Set via loop instead of .map() to avoid intermediate array allocation
+          for (const l of filteredLocations) {
+            filteredUris.add(l.uri)
+          }
+
+          const finalItems: (Location | LocationLink)[] = []
+          for (const item of rawItems) {
             const loc = toLocation(item)
-            return !loc.uri || filteredUris.has(loc.uri)
-          })
+            if (!loc.uri || filteredUris.has(loc.uri)) {
+              finalItems.push(item)
+            }
+          }
+          result = finalItems
         }
       }
 
@@ -529,7 +554,14 @@ function countSymbols(symbols: DocumentSymbol[]): number {
  * Counts unique files from an array of locations
  */
 function countUniqueFiles(locations: Location[]): number {
-  return new Set(locations.map(loc => loc.uri)).size
+  // ⚡ Bolt Optimization: Build Set via loop instead of .map() to avoid intermediate array allocation
+  const uris = new Set<string>()
+  for (const loc of locations) {
+    if (loc.uri) {
+      uris.add(loc.uri)
+    }
+  }
+  return uris.size
 }
 
 /**
@@ -833,8 +865,12 @@ function formatResult(
  * Filters out items with undefined URIs
  */
 function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
-  const validUris = items.map(item => item.uri).filter(uri => uri)
-  return new Set(validUris).size
+  // ⚡ Bolt Optimization: Build Set via loop instead of .map().filter() to avoid intermediate array allocation
+  const validUris = new Set<string>()
+  for (const item of items) {
+    if (item.uri) validUris.add(item.uri)
+  }
+  return validUris.size
 }
 
 /**
@@ -844,8 +880,12 @@ function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
 function countUniqueFilesFromIncomingCalls(
   calls: CallHierarchyIncomingCall[],
 ): number {
-  const validUris = calls.map(call => call.from?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  // ⚡ Bolt Optimization: Build Set via loop instead of .map().filter() to avoid intermediate array allocation
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.from?.uri) validUris.add(call.from.uri)
+  }
+  return validUris.size
 }
 
 /**
@@ -855,6 +895,10 @@ function countUniqueFilesFromIncomingCalls(
 function countUniqueFilesFromOutgoingCalls(
   calls: CallHierarchyOutgoingCall[],
 ): number {
-  const validUris = calls.map(call => call.to?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  // ⚡ Bolt Optimization: Build Set via loop instead of .map().filter() to avoid intermediate array allocation
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.to?.uri) validUris.add(call.to.uri)
+  }
+  return validUris.size
 }

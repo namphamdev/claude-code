@@ -1,0 +1,3 @@
+## 2024-06-18 - Avoid array iteration chaining for large collections in hot paths
+**Learning:** Chaining `.map().filter()` or `.filter().map()` operations on collections that can become extremely large (like LSP responses, which can return thousands of symbols or locations) creates unnecessary intermediate array allocations, dramatically increasing GC pressure and stalling execution.
+**Action:** Always prefer iterating with a simple `for...of` loop or single `reduce()` to directly populate the target data structure (such as a `Set` for deduplication or a final filtered array) when processing unbounded lists like LSP tool responses.
