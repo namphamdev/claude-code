@@ -352,7 +352,10 @@ export const LSPTool = buildTool({
             locations,
             cwd,
           )
-          const filteredUris = new Set(filteredLocations.map(l => l.uri))
+          const filteredUris = new Set<string>()
+          for (const l of filteredLocations) {
+            filteredUris.add(l.uri)
+          }
           result = symbols.filter(
             s => !s?.location?.uri || filteredUris.has(s.location.uri),
           )
@@ -365,7 +368,10 @@ export const LSPTool = buildTool({
             locations,
             cwd,
           )
-          const filteredUris = new Set(filteredLocations.map(l => l.uri))
+          const filteredUris = new Set<string>()
+          for (const l of filteredLocations) {
+            filteredUris.add(l.uri)
+          }
           result = (result as (Location | LocationLink)[]).filter(item => {
             const loc = toLocation(item)
             return !loc.uri || filteredUris.has(loc.uri)
@@ -529,7 +535,11 @@ function countSymbols(symbols: DocumentSymbol[]): number {
  * Counts unique files from an array of locations
  */
 function countUniqueFiles(locations: Location[]): number {
-  return new Set(locations.map(loc => loc.uri)).size
+  const uris = new Set<string>()
+  for (const loc of locations) {
+    uris.add(loc.uri)
+  }
+  return uris.size
 }
 
 /**
@@ -833,8 +843,13 @@ function formatResult(
  * Filters out items with undefined URIs
  */
 function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
-  const validUris = items.map(item => item.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const item of items) {
+    if (item.uri) {
+      validUris.add(item.uri)
+    }
+  }
+  return validUris.size
 }
 
 /**
@@ -844,8 +859,13 @@ function countUniqueFilesFromCallItems(items: CallHierarchyItem[]): number {
 function countUniqueFilesFromIncomingCalls(
   calls: CallHierarchyIncomingCall[],
 ): number {
-  const validUris = calls.map(call => call.from?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.from?.uri) {
+      validUris.add(call.from.uri)
+    }
+  }
+  return validUris.size
 }
 
 /**
@@ -855,6 +875,11 @@ function countUniqueFilesFromIncomingCalls(
 function countUniqueFilesFromOutgoingCalls(
   calls: CallHierarchyOutgoingCall[],
 ): number {
-  const validUris = calls.map(call => call.to?.uri).filter(uri => uri)
-  return new Set(validUris).size
+  const validUris = new Set<string>()
+  for (const call of calls) {
+    if (call.to?.uri) {
+      validUris.add(call.to.uri)
+    }
+  }
+  return validUris.size
 }

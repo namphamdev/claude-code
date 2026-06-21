@@ -3732,11 +3732,12 @@ export async function loadTranscriptFile(
   const allMessages = [...messages.values()]
 
   // Standard leaf computation using parent relationships
-  const parentUuids = new Set(
-    allMessages
-      .map(msg => msg.parentUuid)
-      .filter((uuid): uuid is UUID => uuid !== null),
-  )
+  const parentUuids = new Set<UUID>()
+  for (const msg of allMessages) {
+    if (msg.parentUuid !== null) {
+      parentUuids.add(msg.parentUuid)
+    }
+  }
 
   // Find all terminal messages (messages with no children)
   const terminalMessages = allMessages.filter(msg => !parentUuids.has(msg.uuid))
@@ -4223,7 +4224,12 @@ export async function getAgentTranscript(agentId: AgentId): Promise<{
     }
 
     // Find the most recent leaf message with this agentId
-    const parentUuids = new Set(agentMessages.map(msg => msg.parentUuid))
+    const parentUuids = new Set<UUID>()
+    for (const msg of agentMessages) {
+      if (msg.parentUuid !== null) {
+        parentUuids.add(msg.parentUuid)
+      }
+    }
     const leafMessage = findLatestMessage(
       agentMessages,
       msg => !parentUuids.has(msg.uuid),
