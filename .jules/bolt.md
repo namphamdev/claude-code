@@ -1,0 +1,3 @@
+## 2024-05-17 - Avoid .filter().map() chaining on frequently accessed arrays
+**Learning:** Chaining `.filter().map()` to populate sets or arrays on hot paths (e.g., render loops, frequent task iterations) causes intermediate array allocations, increasing garbage collection pressure and reducing performance. This is particularly impactful in React component renders or busy utility functions iterating over large arrays like `allTasks`.
+**Action:** Replace `.filter().map()` chains with a single `for` loop that iterates over the source array and conditionally pushes or adds to the target Set/Array.
