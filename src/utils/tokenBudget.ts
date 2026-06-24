@@ -63,11 +63,14 @@ export function findTokenBudgetPositions(
   return positions
 }
 
+// new Intl.NumberFormat is expensive to instantiate (~60ms for 1k calls vs ~0.6ms when cached), so we cache it for reuse.
+const numberFormatter = new Intl.NumberFormat('en-US')
+
 export function getBudgetContinuationMessage(
   pct: number,
   turnTokens: number,
   budget: number,
 ): string {
-  const fmt = (n: number): string => new Intl.NumberFormat('en-US').format(n)
+  const fmt = (n: number): string => numberFormatter.format(n)
   return `Stopped at ${pct}% of token target (${fmt(turnTokens)} / ${fmt(budget)}). Keep working \u2014 do not summarize.`
 }
