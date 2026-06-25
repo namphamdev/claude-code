@@ -50,28 +50,38 @@ export function formatBriefTimestamp(
   })
 }
 
+let cachedLocale: string | undefined | null = null
+
 /**
  * Derive a BCP 47 locale tag from POSIX env vars.
  * LC_ALL > LC_TIME > LANG, falls back to undefined (system default).
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
 function getLocale(): string | undefined {
+  if (cachedLocale !== null) {
+    return cachedLocale
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
+    cachedLocale = undefined
     return undefined
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
+    cachedLocale = undefined
     return undefined
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
+    cachedLocale = tag
     return tag
   } catch {
+    cachedLocale = undefined
     return undefined
   }
 }
