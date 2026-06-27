@@ -55,24 +55,36 @@ export function formatBriefTimestamp(
  * LC_ALL > LC_TIME > LANG, falls back to undefined (system default).
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
+let cachedLocale: string | undefined | null = null
+
 function getLocale(): string | undefined {
+  if (cachedLocale !== null) {
+    return cachedLocale
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   const tag = base.replaceAll('_', '-')
-  // Validate by trying to construct an Intl locale — invalid tags throw
+  // Validate by trying to construct an Intl locale — invalid tags throw.
+  // ⚡ Bolt: `new Intl.DateTimeFormat` is expensive (0.1ms+), so we cache the result
+  // of this validation at the module level.
   try {
     new Intl.DateTimeFormat(tag)
-    return tag
+    cachedLocale = tag
+    return cachedLocale
   } catch {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
 }
 

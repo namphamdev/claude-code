@@ -1,0 +1,3 @@
+## 2024-06-11 - Intl Validation and Instantiation Overhead
+**Learning:** `Intl` constructors (e.g. `new Intl.DateTimeFormat()`, `new Intl.NumberFormat()`) are extremely slow in this environment (~0.1ms to 0.5ms per call). Even using them purely to validate strings (like catching exceptions on invalid BCP-47 tags) causes significant performance overhead if run continuously.
+**Action:** Always cache `Intl` formatter instances and validation results at the module level. Avoid dynamic instantiation of formatters inside loops, render passes, or functions called frequently. Replace repeated instantiations with `src/utils/intl.ts` shared instances.

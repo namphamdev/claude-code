@@ -19,6 +19,7 @@ import {
   fetchEnvironments,
 } from '../../utils/teleport/environments.js'
 import { registerBundledSkill } from '../bundledSkills.js'
+import { getTimeZone } from '../../utils/intl.js'
 
 // Base58 alphabet (Bitcoin-style) used by the tagged ID system
 const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -421,7 +422,9 @@ export function registerScheduleRemoteAgentsSkill(): void {
         )
       }
 
-      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      // ⚡ Bolt: `Intl.DateTimeFormat().resolvedOptions().timeZone` is expensive,
+      // so we use the cached value from `getTimeZone()`.
+      const userTimezone = getTimeZone()
       const connectorsInfo = formatConnectorsInfo(connectors)
       const gitRepoUrl = await getCurrentRepoHttpsUrl()
       const lines = ['Available environments:']
