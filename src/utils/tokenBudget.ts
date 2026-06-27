@@ -63,11 +63,17 @@ export function findTokenBudgetPositions(
   return positions
 }
 
+// ⚡ Bolt: `new Intl.NumberFormat` is expensive (~0.1ms), so we cache it at the module level
+let cachedNumberFormatter: Intl.NumberFormat | null = null
+
 export function getBudgetContinuationMessage(
   pct: number,
   turnTokens: number,
   budget: number,
 ): string {
-  const fmt = (n: number): string => new Intl.NumberFormat('en-US').format(n)
+  if (!cachedNumberFormatter) {
+    cachedNumberFormatter = new Intl.NumberFormat('en-US')
+  }
+  const fmt = (n: number): string => cachedNumberFormatter!.format(n)
   return `Stopped at ${pct}% of token target (${fmt(turnTokens)} / ${fmt(budget)}). Keep working \u2014 do not summarize.`
 }
