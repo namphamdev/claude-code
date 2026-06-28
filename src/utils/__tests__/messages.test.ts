@@ -1,3 +1,5 @@
+import { mock } from "bun:test";
+mock.module("bun:bundle", () => ({ feature: () => false }));
 import { describe, expect, test } from "bun:test";
 import {
   deriveShortMessageId,
