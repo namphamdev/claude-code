@@ -5,6 +5,7 @@ import type { ToolUseContext } from '../../Tool.js'
 import { ASK_USER_QUESTION_TOOL_NAME } from '../../tools/AskUserQuestionTool/prompt.js'
 import { REMOTE_TRIGGER_TOOL_NAME } from '../../tools/RemoteTriggerTool/prompt.js'
 import { getClaudeAIOAuthTokens } from '../../utils/auth.js'
+import { getTimeZone } from '../../utils/intl.js'
 import { checkRepoForRemoteAccess } from '../../utils/background/remote/preconditions.js'
 import { logForDebugging } from '../../utils/debug.js'
 import {
@@ -421,7 +422,7 @@ export function registerScheduleRemoteAgentsSkill(): void {
         )
       }
 
-      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const userTimezone = getTimeZone()
       const connectorsInfo = formatConnectorsInfo(connectors)
       const gitRepoUrl = await getCurrentRepoHttpsUrl()
       const lines = ['Available environments:']

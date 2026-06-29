@@ -1,0 +1,3 @@
+## 2025-02-27 - Cache `Intl` Constructors for Performance
+**Learning:** Instantiating `Intl` formatters (e.g., `Intl.NumberFormat`, `Intl.Segmenter`, `Intl.DateTimeFormat`) is an extremely expensive operation in Bun/V8, taking up to ~0.1ms each time, and can block the main thread and cause high GC pressure when used in hot loops or render cycles. Using them merely to validate values (like locales) is also costly.
+**Action:** Always cache these instances or their validation results at the module level for reuse instead of allocating them repeatedly inside functions or loops. Utilize the existing shared helpers in `src/utils/intl.ts` (e.g., `getTimeZone()`) when applicable.
