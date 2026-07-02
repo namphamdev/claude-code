@@ -63,11 +63,17 @@ export function findTokenBudgetPositions(
   return positions
 }
 
+// Cache `new Intl.NumberFormat` as it is expensive to initialize on every call
+let budgetNumberFormatter: Intl.NumberFormat | null = null
+
 export function getBudgetContinuationMessage(
   pct: number,
   turnTokens: number,
   budget: number,
 ): string {
-  const fmt = (n: number): string => new Intl.NumberFormat('en-US').format(n)
+  if (!budgetNumberFormatter) {
+    budgetNumberFormatter = new Intl.NumberFormat('en-US')
+  }
+  const fmt = (n: number): string => budgetNumberFormatter!.format(n)
   return `Stopped at ${pct}% of token target (${fmt(turnTokens)} / ${fmt(budget)}). Keep working \u2014 do not summarize.`
 }
