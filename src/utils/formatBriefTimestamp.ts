@@ -13,6 +13,11 @@
  *
  * `now` is injectable for tests.
  */
+let cachedLocaleTag: string | undefined | null = null
+let sameDayFormatter: Intl.DateTimeFormat | null = null
+let withinWeekFormatter: Intl.DateTimeFormat | null = null
+let olderFormatter: Intl.DateTimeFormat | null = null
+
 export function formatBriefTimestamp(
   isoString: string,
   now: Date = new Date(),
@@ -27,27 +32,36 @@ export function formatBriefTimestamp(
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
+    if (!sameDayFormatter) {
+      sameDayFormatter = new Intl.DateTimeFormat(locale, {
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    }
+    return sameDayFormatter.format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    if (!withinWeekFormatter) {
+      withinWeekFormatter = new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    }
+    return withinWeekFormatter.format(d)
+  }
+
+  if (!olderFormatter) {
+    olderFormatter = new Intl.DateTimeFormat(locale, {
       weekday: 'long',
+      month: 'short',
+      day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
     })
   }
-
-  return d.toLocaleString(locale, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return olderFormatter.format(d)
 }
 
 /**
@@ -56,22 +70,30 @@ export function formatBriefTimestamp(
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
 function getLocale(): string | undefined {
+  if (cachedLocaleTag !== null) {
+    return cachedLocaleTag || undefined
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
+    cachedLocaleTag = ''
     return undefined
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
+    cachedLocaleTag = ''
     return undefined
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
+    cachedLocaleTag = tag
     return tag
   } catch {
+    cachedLocaleTag = ''
     return undefined
   }
 }

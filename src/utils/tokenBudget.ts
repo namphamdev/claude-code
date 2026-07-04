@@ -63,11 +63,13 @@ export function findTokenBudgetPositions(
   return positions
 }
 
+const numberFormatter = new Intl.NumberFormat('en-US')
+
 export function getBudgetContinuationMessage(
   pct: number,
   turnTokens: number,
   budget: number,
 ): string {
-  const fmt = (n: number): string => new Intl.NumberFormat('en-US').format(n)
+  const fmt = (n: number): string => numberFormatter.format(n)
   return `Stopped at ${pct}% of token target (${fmt(turnTokens)} / ${fmt(budget)}). Keep working \u2014 do not summarize.`
 }
