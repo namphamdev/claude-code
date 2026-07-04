@@ -1,0 +1,3 @@
+## 2024-05-15 - High cost of Intl formatters
+**Learning:** Instantiating `Intl` formatters (e.g., `Intl.NumberFormat`, `Intl.Segmenter`, `Intl.DateTimeFormat`) is an expensive operation, even when done purely for validating locale strings as in `getLocale()`. Calling methods like `toLocaleString` and `toLocaleTimeString` also implicitly creates new formatters and incurs a massive performance penalty in hot paths like timestamp formatting and UI loops.
+**Action:** Always cache `Intl` instances and locale validation results at the module level for reuse instead of allocating them repeatedly inside functions or loops to prevent performance bottlenecks.
