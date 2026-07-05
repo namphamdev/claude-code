@@ -1,0 +1,3 @@
+## 2025-07-05 - Intl Object Allocation Overhead
+**Learning:** Instantiating new `Intl` formatters (like `Intl.DateTimeFormat` or `Intl.NumberFormat`) is a surprisingly expensive operation in JS/V8, especially when done inside loops or frequently called utility functions. Even when used purely for validation (like testing if a locale tag is valid by catching exceptions from `new Intl.DateTimeFormat(tag)`), the performance penalty is severe if not cached.
+**Action:** Always cache and reuse `Intl` formatter instances at the module level whenever possible, and ensure the results of static environment/locale resolutions are computed only once during the application lifecycle.
