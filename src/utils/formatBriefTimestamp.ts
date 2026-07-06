@@ -55,25 +55,42 @@ export function formatBriefTimestamp(
  * LC_ALL > LC_TIME > LANG, falls back to undefined (system default).
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
-function getLocale(): string | undefined {
+let cachedLocale: string | undefined | null = null
+
+export function getLocale(): string | undefined {
+  if (cachedLocale !== null) {
+    return cachedLocale
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
-    return tag
+    cachedLocale = tag
+    return cachedLocale
   } catch {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
+}
+
+/**
+ * Resets the cached locale for testing purposes.
+ */
+export function resetCachedLocaleForTesting(): void {
+  cachedLocale = null
 }
 
 function startOfDay(d: Date): number {

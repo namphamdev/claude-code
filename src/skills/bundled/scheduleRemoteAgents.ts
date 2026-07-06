@@ -12,6 +12,7 @@ import {
   parseGitRemote,
 } from '../../utils/detectRepository.js'
 import { getRemoteUrl } from '../../utils/git.js'
+import { getTimeZone } from '../../utils/intl.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   createDefaultCloudEnvironment,
@@ -421,7 +422,7 @@ export function registerScheduleRemoteAgentsSkill(): void {
         )
       }
 
-      const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const userTimezone = getTimeZone()
       const connectorsInfo = formatConnectorsInfo(connectors)
       const gitRepoUrl = await getCurrentRepoHttpsUrl()
       const lines = ['Available environments:']

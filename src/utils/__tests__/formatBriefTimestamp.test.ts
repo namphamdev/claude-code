@@ -1,7 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { formatBriefTimestamp } from "../formatBriefTimestamp";
+import { describe, expect, test, beforeEach } from "bun:test";
+import { formatBriefTimestamp, resetCachedLocaleForTesting, getLocale } from "../formatBriefTimestamp";
 
 describe("formatBriefTimestamp", () => {
+  beforeEach(() => {
+    resetCachedLocaleForTesting();
+  });
   // Fixed "now" for deterministic tests: 2026-04-02T14:00:00Z (Thursday)
   const now = new Date("2026-04-02T14:00:00Z");
 
@@ -72,5 +75,37 @@ describe("formatBriefTimestamp", () => {
     const result = formatBriefTimestamp(recent.toISOString());
     expect(result).not.toBe("");
     expect(result).toContain(":");
+  });
+
+  test("caches the locale", () => {
+    const originalLang = process.env.LANG;
+    const originalLcAll = process.env.LC_ALL;
+    const originalLcTime = process.env.LC_TIME;
+
+    // Clear other env vars that might take precedence
+    delete process.env.LC_ALL;
+    delete process.env.LC_TIME;
+
+    process.env.LANG = 'fr_FR.UTF-8';
+
+    // First call computes it
+    expect(getLocale()).toBe('fr-FR');
+
+    // Change env, shouldn't matter because it's cached
+    process.env.LANG = 'de_DE.UTF-8';
+    expect(getLocale()).toBe('fr-FR');
+
+    // Reset cache, now it should read the new env
+    resetCachedLocaleForTesting();
+    expect(getLocale()).toBe('de-DE');
+
+    if (originalLang !== undefined) process.env.LANG = originalLang;
+    else delete process.env.LANG;
+
+    if (originalLcAll !== undefined) process.env.LC_ALL = originalLcAll;
+    else delete process.env.LC_ALL;
+
+    if (originalLcTime !== undefined) process.env.LC_TIME = originalLcTime;
+    else delete process.env.LC_TIME;
   });
 });
