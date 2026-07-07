@@ -13,6 +13,15 @@
  *
  * `now` is injectable for tests.
  */
+// `Intl.DateTimeFormat` instantiations are expensive, so we cache them and the locale resolution
+let cachedRawEnv: string | undefined
+let cachedLocaleTag: string | undefined
+
+let sameDayFormatter: Intl.DateTimeFormat | null = null
+let recentFormatter: Intl.DateTimeFormat | null = null
+let olderFormatter: Intl.DateTimeFormat | null = null
+let formattersLocale: string | undefined
+
 export function formatBriefTimestamp(
   isoString: string,
   now: Date = new Date(),
@@ -26,28 +35,35 @@ export function formatBriefTimestamp(
   const dayDiff = startOfDay(now) - startOfDay(d)
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
-  if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+  if (locale !== formattersLocale || !sameDayFormatter) {
+    formattersLocale = locale
+    sameDayFormatter = new Intl.DateTimeFormat(locale, {
       hour: 'numeric',
       minute: '2-digit',
     })
-  }
-
-  if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    recentFormatter = new Intl.DateTimeFormat(locale, {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
     })
+    olderFormatter = new Intl.DateTimeFormat(locale, {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
   }
 
-  return d.toLocaleString(locale, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  if (daysAgo === 0) {
+    return sameDayFormatter.format(d)
+  }
+
+  if (daysAgo > 0 && daysAgo < 7) {
+    return recentFormatter!.format(d)
+  }
+
+  return olderFormatter!.format(d)
 }
 
 /**
@@ -58,20 +74,31 @@ export function formatBriefTimestamp(
 function getLocale(): string | undefined {
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
+
+  if (cachedRawEnv === raw) {
+    return cachedLocaleTag
+  }
+
+  cachedRawEnv = raw
+
   if (!raw || raw === 'C' || raw === 'POSIX') {
+    cachedLocaleTag = undefined
     return undefined
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
+    cachedLocaleTag = undefined
     return undefined
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
+    cachedLocaleTag = tag
     return tag
   } catch {
+    cachedLocaleTag = undefined
     return undefined
   }
 }
