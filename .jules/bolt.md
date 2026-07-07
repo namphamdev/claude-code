@@ -1,0 +1,3 @@
+## 2025-07-07 - Native Date `toLocaleString` methods have hidden `Intl` instantiation cost
+**Learning:** `Date.prototype.toLocaleString()` and `Date.prototype.toLocaleTimeString()` are surprisingly slow because JS engines (like V8) internally create a new `Intl.DateTimeFormat` object on every single invocation. In hot loops or large datasets, this becomes a significant bottleneck (taking >4ms per 10k calls).
+**Action:** Always instantiate `Intl.DateTimeFormat` (and other `Intl` objects) explicitly, cache them at the module level (or in a class instance), and reuse them via their `.format(date)` method instead of calling the native Date formatting methods directly.
