@@ -187,6 +187,8 @@ export function computeNextCronRun(
 // — that path translates UTC→local for display and needs midnight-crossing
 // logic for the weekday case. Local scheduled tasks (the default) need neither.
 
+import { getDateTimeFormat } from './intl.js'
+
 const DAY_NAMES = [
   'Sunday',
   'Monday',
@@ -201,18 +203,21 @@ function formatLocalTime(minute: number, hour: number): string {
   // January 1 — no DST gap anywhere. Using `new Date()` (today) would roll
   // 2am→3am on the one spring-forward day per year.
   const d = new Date(2000, 0, 1, hour, minute)
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  return getDateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(d)
 }
 
 function formatUtcTimeAsLocal(minute: number, hour: number): string {
   // Create a date in UTC and format in user's local timezone
   const d = new Date()
   d.setUTCHours(hour, minute, 0, 0)
-  return d.toLocaleTimeString('en-US', {
+  return getDateTimeFormat('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
-  })
+  }).format(d)
 }
 
 export function cronToHuman(cron: string, opts?: { utc?: boolean }): string {

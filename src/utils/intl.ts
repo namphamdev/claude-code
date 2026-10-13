@@ -66,6 +66,38 @@ export function getRelativeTimeFormat(
   return rtf
 }
 
+// DateTimeFormat cache
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+
+export function getDateTimeFormat(
+  locale: string = 'en-US',
+  options?: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale}|${options ? JSON.stringify(options) : ''}`
+  let dtf = dtfCache.get(key)
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat(locale, options)
+    dtfCache.set(key, dtf)
+  }
+  return dtf
+}
+
+// NumberFormat cache
+const numCache = new Map<string, Intl.NumberFormat>()
+
+export function getNumberFormat(
+  locale: string = 'en-US',
+  options?: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  const key = `${locale}|${options ? JSON.stringify(options) : ''}`
+  let numFmt = numCache.get(key)
+  if (!numFmt) {
+    numFmt = new Intl.NumberFormat(locale, options)
+    numCache.set(key, numFmt)
+  }
+  return numFmt
+}
+
 // Timezone is constant for the process lifetime
 let cachedTimeZone: string | null = null
 

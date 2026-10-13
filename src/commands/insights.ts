@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'os'
 import { extname, join } from 'path'
 import type { Command } from '../commands.js'
+import { getNumberFormat } from '../utils/intl.js'
 import { queryWithModel } from '../services/api/claude.js'
 import {
   AGENT_TOOL_NAME,
@@ -895,7 +896,9 @@ async function summarizeTranscriptChunk(chunk: string): Promise<string> {
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
     return text || chunk.slice(0, 2000)
   } catch {
     // On error, just return truncated chunk
@@ -1038,7 +1041,9 @@ RESPOND WITH ONLY A VALID JSON OBJECT matching this schema:
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     // Parse JSON from response
     const jsonMatch = text.match(/\{[\s\S]*\}/)
@@ -1589,7 +1594,9 @@ async function generateSectionInsight(
       },
     })
 
-    const text = extractTextContent(result.message.content as readonly { readonly type: string }[])
+    const text = extractTextContent(
+      result.message.content as readonly { readonly type: string }[],
+    )
 
     if (text) {
       // Parse JSON from response
@@ -1948,6 +1955,7 @@ function generateHtmlReport(
   data: AggregatedData,
   insights: InsightResults,
 ): string {
+  const numFmt = getNumberFormat('en-US')
   const markdownToHtml = (md: string): string => {
     if (!md) return ''
     return md
@@ -2492,7 +2500,7 @@ function generateHtmlReport(
 <body>
   <div class="container">
     <h1>Claude Code Insights</h1>
-    <p class="subtitle">${data.total_messages.toLocaleString()} messages across ${data.total_sessions} sessions${data.total_sessions_scanned && data.total_sessions_scanned > data.total_sessions ? ` (${data.total_sessions_scanned.toLocaleString()} total)` : ''} | ${data.date_range.start} to ${data.date_range.end}</p>
+    <p class="subtitle">${numFmt.format(data.total_messages)} messages across ${data.total_sessions} sessions${data.total_sessions_scanned && data.total_sessions_scanned > data.total_sessions ? ` (${numFmt.format(data.total_sessions_scanned)} total)` : ''} | ${data.date_range.start} to ${data.date_range.end}</p>
 
     ${atAGlanceHtml}
 
@@ -2508,8 +2516,8 @@ function generateHtmlReport(
     </nav>
 
     <div class="stats-row">
-      <div class="stat"><div class="stat-value">${data.total_messages.toLocaleString()}</div><div class="stat-label">Messages</div></div>
-      <div class="stat"><div class="stat-value">+${data.total_lines_added.toLocaleString()}/-${data.total_lines_removed.toLocaleString()}</div><div class="stat-label">Lines</div></div>
+      <div class="stat"><div class="stat-value">${numFmt.format(data.total_messages)}</div><div class="stat-label">Messages</div></div>
+      <div class="stat"><div class="stat-value">+${numFmt.format(data.total_lines_added)}/-${numFmt.format(data.total_lines_removed)}</div><div class="stat-label">Lines</div></div>
       <div class="stat"><div class="stat-value">${data.total_files_modified}</div><div class="stat-label">Files</div></div>
       <div class="stat"><div class="stat-value">${data.days_active}</div><div class="stat-label">Days</div></div>
       <div class="stat"><div class="stat-value">${data.messages_per_day}</div><div class="stat-label">Msgs/Day</div></div>
@@ -3100,14 +3108,15 @@ Then access at: ${s3Url}`
     }
 
     // Build header with stats
+    const numFmt = getNumberFormat('en-US')
     const sessionLabel =
       data.total_sessions_scanned &&
       data.total_sessions_scanned > data.total_sessions
-        ? `${data.total_sessions_scanned.toLocaleString()} sessions total · ${data.total_sessions} analyzed`
+        ? `${numFmt.format(data.total_sessions_scanned)} sessions total · ${data.total_sessions} analyzed`
         : `${data.total_sessions} sessions`
     const stats = [
       sessionLabel,
-      `${data.total_messages.toLocaleString()} messages`,
+      `${numFmt.format(data.total_messages)} messages`,
       `${Math.round(data.total_duration_hours)}h`,
       `${data.git_commits} commits`,
     ].join(' · ')
