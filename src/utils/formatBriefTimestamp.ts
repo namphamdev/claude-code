@@ -27,28 +27,46 @@ export function formatBriefTimestamp(
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+    return getFormatter(locale, {
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    return getFormatter(locale, {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
-  return d.toLocaleString(locale, {
+  return getFormatter(locale, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  })
+  }).format(d)
 }
+
+// Cache for Intl.DateTimeFormat to avoid expensive instantiations
+const formatters = new Map<string, Intl.DateTimeFormat>()
+
+function getFormatter(
+  locale: string | undefined,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale || 'default'}-${JSON.stringify(options)}`
+  let formatter = formatters.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options)
+    formatters.set(key, formatter)
+  }
+  return formatter
+}
+
+let cachedLocale: string | undefined | null = null
 
 /**
  * Derive a BCP 47 locale tag from POSIX env vars.
@@ -56,22 +74,30 @@ export function formatBriefTimestamp(
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
 function getLocale(): string | undefined {
+  if (cachedLocale !== null) {
+    return cachedLocale
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
+    cachedLocale = undefined
     return undefined
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
+    cachedLocale = undefined
     return undefined
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
+    cachedLocale = tag
     return tag
   } catch {
+    cachedLocale = undefined
     return undefined
   }
 }
