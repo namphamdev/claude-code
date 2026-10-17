@@ -27,28 +27,58 @@ export function formatBriefTimestamp(
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+    return getFormatterSameDay().format(d)
+  }
+
+  if (daysAgo > 0 && daysAgo < 7) {
+    return getFormatterWithinWeek().format(d)
+  }
+
+  return getFormatterOlder().format(d)
+}
+
+// Cache formatters to avoid expensive Intl.DateTimeFormat instantiation on every call
+let formatterSameDay: Intl.DateTimeFormat | null = null
+let formatterWithinWeek: Intl.DateTimeFormat | null = null
+let formatterOlder: Intl.DateTimeFormat | null = null
+
+function getFormatterSameDay(): Intl.DateTimeFormat {
+  if (!formatterSameDay) {
+    formatterSameDay = new Intl.DateTimeFormat(getLocale(), {
       hour: 'numeric',
       minute: '2-digit',
     })
   }
+  return formatterSameDay
+}
 
-  if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+function getFormatterWithinWeek(): Intl.DateTimeFormat {
+  if (!formatterWithinWeek) {
+    formatterWithinWeek = new Intl.DateTimeFormat(getLocale(), {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
     })
   }
-
-  return d.toLocaleString(locale, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return formatterWithinWeek
 }
+
+function getFormatterOlder(): Intl.DateTimeFormat {
+  if (!formatterOlder) {
+    formatterOlder = new Intl.DateTimeFormat(getLocale(), {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
+  return formatterOlder
+}
+
+// Cache the parsed locale since environment variables rarely change at runtime,
+// and validating the tag using new Intl.DateTimeFormat is very expensive.
+let cachedLocale: string | undefined | null = null
 
 /**
  * Derive a BCP 47 locale tag from POSIX env vars.
@@ -56,24 +86,31 @@ export function formatBriefTimestamp(
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
 function getLocale(): string | undefined {
+  if (cachedLocale !== null) {
+    return cachedLocale
+  }
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
-    return undefined
+    cachedLocale = undefined
+    return cachedLocale
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
-    return tag
+    cachedLocale = tag
   } catch {
-    return undefined
+    cachedLocale = undefined
   }
+  return cachedLocale
 }
 
 function startOfDay(d: Date): number {
