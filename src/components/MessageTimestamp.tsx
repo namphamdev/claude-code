@@ -7,6 +7,20 @@ type Props = {
   isTranscriptMode: boolean
 }
 
+// Cache the formatter to avoid expensive Intl.DateTimeFormat instantiation on every render
+let timeFormatter: Intl.DateTimeFormat | null = null
+
+function getTimeFormatter(): Intl.DateTimeFormat {
+  if (!timeFormatter) {
+    timeFormatter = new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+  }
+  return timeFormatter
+}
+
 export function MessageTimestamp({
   message,
   isTranscriptMode,
@@ -21,14 +35,7 @@ export function MessageTimestamp({
     return null
   }
 
-  const formattedTimestamp = new Date(message.timestamp).toLocaleTimeString(
-    'en-US',
-    {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    },
-  )
+  const formattedTimestamp = getTimeFormatter().format(new Date(message.timestamp))
 
   return (
     <Box minWidth={stringWidth(formattedTimestamp)}>
