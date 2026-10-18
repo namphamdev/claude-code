@@ -1,0 +1,3 @@
+## 2025-02-12 - Optimize intermediate array allocations when populating Sets
+**Learning:** In hot paths and when processing potentially large arrays (like LSP call hierarchies and incoming/outgoing calls), using chained array operations like `.map().filter()` or `.filter().map()` before inserting into a `Set` forces V8 to allocate and immediately discard intermediate arrays, creating unnecessary garbage collection pressure and CPU overhead.
+**Action:** When populating a `Set` or other data structure, use a single `for...of` loop to iterate, filter, extract properties, and add to the `Set` in one pass to avoid intermediate array allocations.
