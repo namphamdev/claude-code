@@ -8,11 +8,13 @@
  *
  * Respects POSIX locale env vars (LC_ALL > LC_TIME > LANG) for time format
  * (12h/24h), weekday names, month names, and overall structure.
- * Bun/V8's `toLocaleString(undefined)` ignores these on macOS, so we
+ * Bun/V8's \`toLocaleString(undefined)\` ignores these on macOS, so we
  * convert them to BCP 47 tags ourselves.
  *
- * `now` is injectable for tests.
+ * \`now\` is injectable for tests.
  */
+import { getSystemLocale, getDateTimeFormat } from './intl.js'
+
 export function formatBriefTimestamp(
   isoString: string,
   now: Date = new Date(),
@@ -22,58 +24,32 @@ export function formatBriefTimestamp(
     return ''
   }
 
-  const locale = getLocale()
+  const locale = getSystemLocale()
   const dayDiff = startOfDay(now) - startOfDay(d)
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+    return getDateTimeFormat(locale, {
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    return getDateTimeFormat(locale, {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
-  return d.toLocaleString(locale, {
+  return getDateTimeFormat(locale, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  })
-}
-
-/**
- * Derive a BCP 47 locale tag from POSIX env vars.
- * LC_ALL > LC_TIME > LANG, falls back to undefined (system default).
- * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
- */
-function getLocale(): string | undefined {
-  const raw =
-    process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
-  if (!raw || raw === 'C' || raw === 'POSIX') {
-    return undefined
-  }
-  // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
-  const base = raw.split('.')[0]!.split('@')[0]!
-  if (!base) {
-    return undefined
-  }
-  const tag = base.replaceAll('_', '-')
-  // Validate by trying to construct an Intl locale — invalid tags throw
-  try {
-    new Intl.DateTimeFormat(tag)
-    return tag
-  } catch {
-    return undefined
-  }
+  }).format(d)
 }
 
 function startOfDay(d: Date): number {

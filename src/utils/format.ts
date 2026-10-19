@@ -1,6 +1,6 @@
 // Pure display formatters — leaf-safe (no Ink). Width-aware truncation lives in ./truncate.ts.
 
-import { getRelativeTimeFormat, getTimeZone } from './intl.js'
+import { getRelativeTimeFormat, getTimeZone, getDateTimeFormat } from './intl.js'
 
 /**
  * Formats a byte count to a human-readable string (KB, MB, GB).
@@ -265,7 +265,7 @@ export function formatResetTime(
       dateOptions.year = 'numeric'
     }
 
-    const dateString = date.toLocaleString('en-US', dateOptions)
+    const dateString = getDateTimeFormat('en-US', dateOptions).format(date)
 
     // Remove the space before AM/PM and make it lowercase
     return (
@@ -275,11 +275,11 @@ export function formatResetTime(
   }
 
   // For resets within 24 hours, show just the time (existing behavior)
-  const timeString = date.toLocaleTimeString('en-US', {
+  const timeString = getDateTimeFormat('en-US', {
     hour: 'numeric',
     minute: minutes === 0 ? undefined : '2-digit',
     hour12: true,
-  })
+  }).format(date)
 
   // Remove the space before AM/PM and make it lowercase, then add timezone
   return (
