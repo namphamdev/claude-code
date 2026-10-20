@@ -1,0 +1,3 @@
+## 2024-10-24 - `Intl.DateTimeFormat` validation and `Date.prototype.toLocaleString()` overhead
+**Learning:** Parsing and validating a locale string dynamically from environment variables on every invocation (using `Intl.DateTimeFormat`) is extremely slow. In addition, native methods like `Date.prototype.toLocaleString()` and `toLocaleTimeString()` implicitly instantiate `Intl.DateTimeFormat` on each call, leading to large overhead in hot paths (like rendering many timestamped messages).
+**Action:** Always cache the resolved locale at the module level. Instead of using `Date.prototype.toLocaleString()`, create explicitly cached `Intl.DateTimeFormat` instances for each needed format style and reuse them by calling their `.format(date)` method.
