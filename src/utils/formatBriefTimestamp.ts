@@ -13,6 +13,45 @@
  *
  * `now` is injectable for tests.
  */
+let cachedLocale: string | undefined | null = null
+function getLocaleCached(): string | undefined {
+  if (cachedLocale === null) {
+    cachedLocale = getLocale() ?? undefined
+  }
+  return cachedLocale
+}
+
+let formatters: {
+  sameDay: Intl.DateTimeFormat
+  recent: Intl.DateTimeFormat
+  older: Intl.DateTimeFormat
+} | null = null
+
+function getFormatters() {
+  if (!formatters) {
+    const locale = getLocaleCached()
+    formatters = {
+      sameDay: new Intl.DateTimeFormat(locale, {
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+      recent: new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+      older: new Intl.DateTimeFormat(locale, {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    }
+  }
+  return formatters
+}
+
 export function formatBriefTimestamp(
   isoString: string,
   now: Date = new Date(),
@@ -22,32 +61,20 @@ export function formatBriefTimestamp(
     return ''
   }
 
-  const locale = getLocale()
   const dayDiff = startOfDay(now) - startOfDay(d)
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
+  const fms = getFormatters()
+
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
-      hour: 'numeric',
-      minute: '2-digit',
-    })
+    return fms.sameDay.format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
-      weekday: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
+    return fms.recent.format(d)
   }
 
-  return d.toLocaleString(locale, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  return fms.older.format(d)
 }
 
 /**
