@@ -13,6 +13,8 @@
  *
  * `now` is injectable for tests.
  */
+import { getDateTimeFormat } from './intl.js'
+
 export function formatBriefTimestamp(
   isoString: string,
   now: Date = new Date(),
@@ -27,27 +29,27 @@ export function formatBriefTimestamp(
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+    return getDateTimeFormat(locale, {
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    return getDateTimeFormat(locale, {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
-  return d.toLocaleString(locale, {
+  return getDateTimeFormat(locale, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  })
+  }).format(d)
 }
 
 /**
@@ -55,25 +57,36 @@ export function formatBriefTimestamp(
  * LC_ALL > LC_TIME > LANG, falls back to undefined (system default).
  * Converts POSIX format (en_GB.UTF-8) to BCP 47 (en-GB).
  */
+let cachedLocale: string | undefined = undefined
+let hasCachedLocale = false
+
 function getLocale(): string | undefined {
+  if (hasCachedLocale) return cachedLocale
+
   const raw =
     process.env.LC_ALL || process.env.LC_TIME || process.env.LANG || ''
   if (!raw || raw === 'C' || raw === 'POSIX') {
+    cachedLocale = undefined
+    hasCachedLocale = true
     return undefined
   }
   // Strip codeset (.UTF-8) and modifier (@euro), replace _ with -
   const base = raw.split('.')[0]!.split('@')[0]!
   if (!base) {
+    cachedLocale = undefined
+    hasCachedLocale = true
     return undefined
   }
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
     new Intl.DateTimeFormat(tag)
-    return tag
+    cachedLocale = tag
   } catch {
-    return undefined
+    cachedLocale = undefined
   }
+  hasCachedLocale = true
+  return cachedLocale
 }
 
 function startOfDay(d: Date): number {
