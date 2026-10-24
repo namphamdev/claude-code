@@ -50,6 +50,41 @@ export function getWordSegmenter(): Intl.Segmenter {
   return wordSegmenter
 }
 
+// DateTimeFormat cache
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+
+export function getDateTimeFormat(
+  locale?: string | string[],
+  options?: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  let optionsKey = ''
+  if (options) {
+    // Create a deterministic string representation of options
+    const normalizedOptions: Record<string, unknown> = {}
+    const keys = Object.keys(
+      options,
+    ).sort() as (keyof Intl.DateTimeFormatOptions)[]
+    for (const key of keys) {
+      if (options[key] !== undefined) {
+        normalizedOptions[key] = options[key]
+      }
+    }
+    optionsKey = JSON.stringify(normalizedOptions)
+  }
+
+  const localeKey = Array.isArray(locale)
+    ? locale.join(',')
+    : locale || 'default'
+  const key = `${localeKey}:${optionsKey}`
+
+  let dtf = dtfCache.get(key)
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat(locale, options)
+    dtfCache.set(key, dtf)
+  }
+  return dtf
+}
+
 // RelativeTimeFormat cache (keyed by style:numeric)
 const rtfCache = new Map<string, Intl.RelativeTimeFormat>()
 
