@@ -92,3 +92,19 @@ export function getSystemLocaleLanguage(): string | undefined {
   }
   return cachedSystemLocaleLanguage
 }
+
+// DateTimeFormat cache
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+
+export function getDateTimeFormat(
+  locale?: string | string[],
+  options?: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale || 'default'}:${options ? JSON.stringify(options) : '{}'}`
+  let dtf = dtfCache.get(key)
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat(locale, options)
+    dtfCache.set(key, dtf)
+  }
+  return dtf
+}
