@@ -1,3 +1,4 @@
+import { getDateTimeFormat } from './intl.js'
 /**
  * Format an ISO timestamp for the brief/chat message label line.
  *
@@ -27,27 +28,27 @@ export function formatBriefTimestamp(
   const daysAgo = Math.round(dayDiff / 86_400_000)
 
   if (daysAgo === 0) {
-    return d.toLocaleTimeString(locale, {
+    return getDateTimeFormat(locale, {
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
   if (daysAgo > 0 && daysAgo < 7) {
-    return d.toLocaleString(locale, {
+    return getDateTimeFormat(locale, {
       weekday: 'long',
       hour: 'numeric',
       minute: '2-digit',
-    })
+    }).format(d)
   }
 
-  return d.toLocaleString(locale, {
+  return getDateTimeFormat(locale, {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  })
+  }).format(d)
 }
 
 /**
@@ -69,7 +70,7 @@ function getLocale(): string | undefined {
   const tag = base.replaceAll('_', '-')
   // Validate by trying to construct an Intl locale — invalid tags throw
   try {
-    new Intl.DateTimeFormat(tag)
+    getDateTimeFormat(tag)
     return tag
   } catch {
     return undefined
