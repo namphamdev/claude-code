@@ -53,6 +53,22 @@ export function getWordSegmenter(): Intl.Segmenter {
 // RelativeTimeFormat cache (keyed by style:numeric)
 const rtfCache = new Map<string, Intl.RelativeTimeFormat>()
 
+// DateTimeFormat cache (keyed by locales:options)
+const dtfCache = new Map<string, Intl.DateTimeFormat>()
+
+export function getDateTimeFormat(
+  locales?: string | string[],
+  options?: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locales || 'default'}|${options ? JSON.stringify(options) : 'undefined'}`
+  let dtf = dtfCache.get(key)
+  if (!dtf) {
+    dtf = new Intl.DateTimeFormat(locales, options)
+    dtfCache.set(key, dtf)
+  }
+  return dtf
+}
+
 export function getRelativeTimeFormat(
   style: 'long' | 'short' | 'narrow',
   numeric: 'always' | 'auto',
