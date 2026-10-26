@@ -1,0 +1,3 @@
+## 2026-10-26 - Native Date Formatting Performance
+**Learning:** Native Date methods like `toLocaleString()` and `toLocaleTimeString()` are surprisingly slow in Node.js/V8 because they allocate a new `Intl.DateTimeFormat` instance internally on every single invocation. In a loop of 10,000 operations, this costs ~1000ms compared to ~60ms when caching the `Intl.DateTimeFormat` instance.
+**Action:** Avoid calling `Date.prototype.toLocaleString()` or `Date.prototype.toLocaleTimeString()` in any hot path. Instead, use a shared, cached `Intl.DateTimeFormat` instance and call its `format(date)` method.
